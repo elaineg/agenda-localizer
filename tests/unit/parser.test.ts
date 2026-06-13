@@ -25,7 +25,8 @@ function utcHM(d: Date) {
 describe("ianaFromAbbr", () => {
   it("maps UTC", () => expect(ianaFromAbbr("UTC")).toBe("UTC"));
   it("maps PT to America/Los_Angeles", () => expect(ianaFromAbbr("PT")).toBe("America/Los_Angeles"));
-  it("maps PDT to America/Los_Angeles", () => expect(ianaFromAbbr("PDT")).toBe("America/Los_Angeles"));
+  // H2: PDT is now a fixed offset (UTC-7) not DST-aware; PT remains America/Los_Angeles
+  it("maps PDT to Etc/GMT+7 (H2: fixed offset)", () => expect(ianaFromAbbr("PDT")).toBe("Etc/GMT+7"));
   it("maps ET to America/New_York", () => expect(ianaFromAbbr("ET")).toBe("America/New_York"));
   it("maps BST to Europe/London", () => expect(ianaFromAbbr("BST")).toBe("Europe/London"));
   it("maps JST to Asia/Tokyo", () => expect(ianaFromAbbr("JST")).toBe("Asia/Tokyo"));
@@ -603,6 +604,39 @@ describe("URL encoding/decoding", () => {
   it("returns null for corrupt hash", () => {
     expect(decodeAgendaState("NOTVALID!!!")).toBeNull();
   });
+
+  // H5: slug.payload round-trip
+  it("H5: decodes slug.payload format correctly", () => {
+    const state = { text: "Launch Week 2026\n9:00 AM PT", sourceTimezone: "America/Los_Angeles" };
+    const payload = encodeAgendaState(state);
+    const sluggedHash = `launch-week-2026.${payload}`;
+    const decoded = decodeAgendaState(sluggedHash);
+    expect(decoded).toEqual(state);
+  });
+
+  it("H5: decodes slug.payload format with # prefix", () => {
+    const state = { text: "DevConf\n16:00 UTC", sourceTimezone: "UTC" };
+    const payload = encodeAgendaState(state);
+    const sluggedHash = `#devconf.${payload}`;
+    const decoded = decodeAgendaState(sluggedHash);
+    expect(decoded).toEqual(state);
+  });
+
+  it("H5: decodes when slug is edited/truncated — payload unchanged", () => {
+    const state = { text: "My Agenda\n10:00 AM ET", sourceTimezone: "America/New_York" };
+    const payload = encodeAgendaState(state);
+    // Simulate user editing slug part
+    const editedSlugHash = `edited-slug.${payload}`;
+    const decoded = decodeAgendaState(editedSlugHash);
+    expect(decoded).toEqual(state);
+  });
+
+  it("H5: plain payload (no slug) still decodes", () => {
+    const state = { text: "No slug\n12:00 UTC", sourceTimezone: "UTC" };
+    const payload = encodeAgendaState(state);
+    const decoded = decodeAgendaState(payload);
+    expect(decoded).toEqual(state);
+  });
 });
 
 describe("Timezone abbreviations", () => {
@@ -613,5 +647,103 @@ describe("Timezone abbreviations", () => {
     for (const abbr of expected) {
       expect(ianaFromAbbr(abbr)).not.toBeNull();
     }
+  });
+
+  // H2: UK alias
+  it("H2: maps UK to Europe/London", () => {
+    expect(ianaFromAbbr("UK")).toBe("Europe/London");
+  });
+});
+
+describe("H1: title preserves trailing words (word-drop regression)", () => {
+  it("title keeps SDK: 'Live Coding: Build with our SDK 11:30am PT'", () => {
+    const rows = parseAgenda("Live Coding: Build with our SDK 11:30am PT", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    const s = rows[0] as ParsedSession;
+    expect(s.type).toBe("session");
+    expect(s.title).toContain("SDK");
+    expect(s.title).toBe("Live Coding: Build with our SDK");
+  });
+
+  it("title keeps 'Panel on DX' (no time — note row, not truncated)", () => {
+    const rows = parseAgenda("Panel on DX", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows[0].type).toBe("note");
+    // As a note, rawLine should be intact
+    expect((rows[0] as { rawLine: string }).rawLine).toBe("Panel on DX");
+  });
+});
+
+describe("H1: bare-hour range parsing ('9-10am hallway track')", () => {
+  it("parses '9-10am hallway track' with START time 9:00am and title 'hallway track'", () => {
+    const rows = parseAgenda("9-10am hallway track", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    const s = rows[0] as ParsedSession;
+    expect(s.type).toBe("session");
+    // Start should be 9:00am UTC = 09:00 UTC
+    expect(utcHM(s.startUtc)).toEqual({ h: 9, m: 0 });
+    // End should be 10:00am UTC = 10:00 UTC
+    expect(s.endUtc).not.toBeNull();
+    expect(utcHM(s.endUtc!)).toEqual({ h: 10, m: 0 });
+    // Title should be "hallway track", not "9 hallway track"
+    expect(s.title).toBe("hallway track");
+    expect(s.title).not.toMatch(/^9\s/);
+  });
+
+  it("parses '9-10am PT hallway track' — localizes START from 9am PT", () => {
+    const rows = parseAgenda("9-10am PT hallway track", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    const s = rows[0] as ParsedSession;
+    expect(s.type).toBe("session");
+    // 9 AM PDT (UTC-7 in summer) = 16:00 UTC
+    expect(utcHM(s.startUtc)).toEqual({ h: 16, m: 0 });
+    expect(s.title).toBe("hallway track");
+  });
+});
+
+describe("H2: PST/PDT/EST/EDT as fixed offsets (not DST-aware)", () => {
+  it("H2: '11:00 AM PST' and '19:00 UTC' are the same instant (both UTC 19:00)", () => {
+    // 11:00 AM PST (fixed UTC-8) = 11 + 8 = 19:00 UTC
+    const rowsPst = parseAgenda("11:00 AM PST", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const rowsUtc = parseAgenda("19:00 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sPst = rowsPst[0] as ParsedSession;
+    const sUtc = rowsUtc[0] as ParsedSession;
+    expect(sPst.type).toBe("session");
+    expect(sUtc.type).toBe("session");
+    // Both must be the same UTC time
+    expect(sPst.startUtc.getTime()).toBe(sUtc.startUtc.getTime());
+  });
+
+  it("H2: PST is always UTC-8 (fixed), even in summer", () => {
+    // REF_DATE is summer — PST must still be UTC-8, not UTC-7
+    const rows = parseAgenda("11:00 AM PST", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const s = rows[0] as ParsedSession;
+    expect(utcHM(s.startUtc)).toEqual({ h: 19, m: 0 });
+  });
+
+  it("H2: PDT is always UTC-7 (fixed)", () => {
+    // 9:00 AM PDT (fixed UTC-7) = 16:00 UTC
+    const rows = parseAgenda("9:00 AM PDT", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const s = rows[0] as ParsedSession;
+    expect(utcHM(s.startUtc)).toEqual({ h: 16, m: 0 });
+  });
+
+  it("H2: EST is always UTC-5 (fixed)", () => {
+    // 11:00 AM EST (fixed UTC-5) = 16:00 UTC
+    const rows = parseAgenda("11:00 AM EST", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const s = rows[0] as ParsedSession;
+    expect(utcHM(s.startUtc)).toEqual({ h: 16, m: 0 });
+  });
+
+  it("H2: PT in summer is UTC-7 (DST-aware PDT)", () => {
+    // 9 AM PT in summer = 9 AM PDT = UTC-7 = 16:00 UTC
+    const rows = parseAgenda("9:00 AM PT", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const s = rows[0] as ParsedSession;
+    expect(utcHM(s.startUtc)).toEqual({ h: 16, m: 0 });
   });
 });

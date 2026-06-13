@@ -1,0 +1,78 @@
+{
+  "app": "agenda-localizer",
+  "url": "https://agenda-localizer-iyj1f0v5d-elainegao.vercel.app",
+  "generated": "2026-06-12 (run 20260612-225535-daily, from roster.json 2026-06-12 ICP roster)",
+  "note": "All 10 personas copied verbatim from lib/personas/roster.json; only the app-specific 'motivation' field added. Product: paste a multi-session multi-timezone agenda -> one shareable link auto-localized to each viewer's timezone, with add-to-calendar links, no account, all state in URL.",
+  "personas": [
+    {
+      "id": 1, "name": "Priya", "role": "Senior backend software engineer",
+      "tech": "high", "device": "desktop, large monitor, keyboard-first",
+      "stack": "terminal + neovim, GitHub, Kubernetes dashboards, Datadog, Linear, Slack",
+      "temperament": "skeptical of new tools; hates signups; will inspect network tab if suspicious; abandons anything slower than a CLI",
+      "motivation": "Helps run her company's internal on-call/incident-review syncs and an open-source project's contributor calls across US/EU/India. Lands here to paste a 5-session schedule and hand teammates one link instead of fielding 'what time is that for me?' — but she'll inspect the network tab to confirm nothing is phoning home."
+    },
+    {
+      "id": 2, "name": "Marcus", "role": "Frontend engineer, 2 years in",
+      "tech": "high", "device": "desktop, Chrome with devtools open",
+      "stack": "VS Code, GitHub, Vercel, Figma dev mode, Storybook, Discord/Slack",
+      "temperament": "enthusiastic early adopter; shares tools in team Slack when impressed; notices janky CSS instantly",
+      "motivation": "Posts the schedule for his team's public 'launch week' livestream series in a Discord. Wants to drop one link that shows every talk in each viewer's local time; will judge the parser and the polish of the shared view harshly, and share it if it impresses him."
+    },
+    {
+      "id": 3, "name": "Wen", "role": "Marketing data analyst",
+      "tech": "high-medium", "device": "desktop, two monitors",
+      "stack": "BigQuery/SQL, Google Sheets, Looker Studio, dbt, GA4, Slack",
+      "temperament": "lives in data hygiene; distrusts tools that transform data invisibly; wants CSV in/out everywhere",
+      "motivation": "Coordinates a recurring global webinar series and distrusts any tool that silently mangles times. Wants to SEE exactly what got parsed (and what didn't) and verify a couple conversions by hand before trusting it with the audience."
+    },
+    {
+      "id": 4, "name": "Tomás", "role": "Operations analyst at a mid-size company",
+      "tech": "medium", "device": "corporate Windows laptop, Edge",
+      "stack": "Excel (power user), Tableau, Jira, Teams, SharePoint",
+      "temperament": "pragmatic; IT blocks installs so browser tools appeal; wary of pasting company data into random sites",
+      "motivation": "Schedules cross-region all-hands and training sessions for a distributed ops team. A no-install browser tool appeals, but he's wary of pasting internal schedule details into a random site — the no-account/no-server claim matters to him."
+    },
+    {
+      "id": 5, "name": "Dana", "role": "Demand-gen marketer",
+      "tech": "medium", "device": "MacBook in cafes; phone between meetings",
+      "stack": "HubSpot, GA4, Notion, Canva, LinkedIn Campaign Manager, Google Ads",
+      "temperament": "ruthless about time; if value isn't obvious in one scroll she's gone; screenshots tools she likes for the team channel",
+      "motivation": "Promotes a multi-timezone virtual summit and needs the agenda in emails and landing pages so APAC prospects don't miss sessions. If the value isn't obvious in one scroll she's gone; if it is, she screenshots it for the team."
+    },
+    {
+      "id": 6, "name": "Jules", "role": "Content & community marketer",
+      "tech": "medium", "device": "50/50 desktop and mobile",
+      "stack": "Notion, Buffer, Mailchimp, Figma (consuming), X/LinkedIn/Mastodon, Discord",
+      "temperament": "posts constantly, juggles platform quirks daily; allergic to anything requiring a login for a small job",
+      "motivation": "Runs a weekly community office-hours + AMA series with a globally distributed Discord. Posts the schedule constantly and is allergic to logins for a small job — this is exactly the 'one link everyone reads in their own time' job she does by hand today."
+    },
+    {
+      "id": 7, "name": "Aisha", "role": "Product designer",
+      "tech": "medium-high", "device": "desktop, big display, trackpad",
+      "stack": "Figma, FigJam, Notion, Loom, Maze, Slack",
+      "temperament": "judges craft hard — spacing, copy tone, empty states; a clumsy UI loses her regardless of utility; advocates loudly for tools that feel considered",
+      "motivation": "Helps coordinate a design-community event track across timezones and will open the shared view as an attendee. Judges craft hard — spacing, copy tone, the localized cards, empty/error states; a clumsy UI loses her regardless of utility."
+    },
+    {
+      "id": 8, "name": "Rob", "role": "Brand/visual designer, freelance",
+      "tech": "medium", "device": "desktop, color-calibrated monitor",
+      "stack": "Figma, Illustrator, Photoshop, Google Drive, client Slacks/emails",
+      "temperament": "does repetitive asset-prep grunt work weekly; price-sensitive; compares everything to 'I could do this in Photoshop in 4 minutes'",
+      "motivation": "Occasionally schedules client review calls and a small creator-community workshop across a couple timezones. Lower-frequency user; will weigh this against 'I could just write the times out myself' — value must clearly beat doing it by hand."
+    },
+    {
+      "id": 9, "name": "Elena", "role": "Engineering manager (8 reports)",
+      "tech": "medium-high but no time", "device": "laptop + phone, half the day in meetings",
+      "stack": "Google Calendar (wall-to-wall), Slack, Linear, Google Docs, Zoom, dashboards she skims",
+      "temperament": "30-second patience budget; uses tools between meetings on her phone; anything requiring setup is dead to her; recommends tools that save her reports time",
+      "motivation": "Runs a distributed team across 3 timezones and shares sprint-ceremony / planning schedules. 30-second patience budget, often on her phone between meetings — will likely open a shared link on mobile and judge whether it's instantly legible."
+    },
+    {
+      "id": 10, "name": "Sam", "role": "Product manager",
+      "tech": "medium", "device": "mobile-heavy between meetings, laptop otherwise",
+      "stack": "Notion, Sheets, Slack, Zoom, Asana, Amplitude (skims), endless browser tabs",
+      "temperament": "synthesizes and shares constantly — exports, links, screenshots; values anything that makes him look organized; mild tech confidence, won't debug anything",
+      "motivation": "Organizes cross-functional roadmap-review sessions with stakeholders in different regions. Synthesizes and shares constantly and loves anything that makes him look organized — a clean shareable localized agenda is his kind of artifact. Won't debug anything that breaks."
+    }
+  ]
+}

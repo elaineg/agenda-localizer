@@ -25,9 +25,11 @@ test("Load sample agenda renders ≥3 sessions with no unparsed warnings for par
 }) => {
   await page.goto(BASE);
   // The creator view loads with SAMPLE_TEXT pre-filled (default state)
-  // Ensure sessions render by checking session cards exist
+  // Ensure sessions render by checking session cards exist in the desktop preview panel
   // The sample has 4 parseable sessions + 1 unparseable line
-  const sessionCards = page.locator('.bg-white.border.border-slate-200.rounded-lg');
+  // Scope to the desktop panel (.hidden.lg:flex) to avoid the mobile preview (.lg:hidden)
+  const desktopPanel = page.locator('.hidden.lg\\:flex');
+  const sessionCards = desktopPanel.locator('.bg-white.border.border-slate-200.rounded-lg');
   await expect(sessionCards.first()).toBeVisible();
   const count = await sessionCards.count();
   expect(count).toBeGreaterThanOrEqual(3);
@@ -37,9 +39,10 @@ test("Load sample agenda renders ≥3 sessions with no unparsed warnings for par
   const yourTimeCount = await yourTimeLabels.count();
   expect(yourTimeCount).toBeGreaterThanOrEqual(3);
 
-  // There is exactly one unparsed line (the last line of sample)
-  const unparsedCards = page.locator('.bg-amber-50');
-  await expect(unparsedCards.first()).toBeVisible();
+  // The last line of sample ("Networking Lunch") has no time, so round-2 renders it
+  // as a note row (italic text), NOT an amber warning card.
+  const noteRow = page.locator('p.italic', { hasText: "Networking Lunch" });
+  await expect(noteRow.first()).toBeVisible();
 });
 
 // ── 2. "Copy share link" button exists and shows "✓ Copied!" on click ────────
@@ -98,17 +101,20 @@ test("Unparseable line flagged inline without breaking other sessions", async ({
   );
   await page.goto(url);
 
-  // Two session cards
+  // Two session cards (shared view)
   const sessionCards = page.locator(".bg-white.border.border-slate-200.rounded-lg");
   await expect(sessionCards.first()).toBeVisible();
   const count = await sessionCards.count();
   expect(count).toBeGreaterThanOrEqual(2);
 
-  // One amber unparsed card with the text
-  const unparsed = page.locator(".bg-amber-50");
-  await expect(unparsed.first()).toBeVisible();
-  await expect(unparsed.first()).toContainText("just some words with no time");
-  await expect(unparsed.first()).toContainText("Couldn't read a time");
+  // Round-2: timeless lines ("just some words with no time") are rendered as note rows
+  // (italic text) in the shared view — NOT as amber warning cards.
+  // Shared view intentionally omits all unparsed/warning amber cards.
+  const noteRow = page.locator('p.italic', { hasText: "just some words with no time" });
+  await expect(noteRow.first()).toBeVisible();
+  // No amber unparsed warning card appears in shared view
+  const unparsedAmberCard = page.locator(".bg-amber-50");
+  await expect(unparsedAmberCard).toHaveCount(0);
 });
 
 // ── 5. Share link round-trip: URL encodes state, fresh tab reproduces agenda ──
@@ -298,7 +304,7 @@ just some words with no time`;
   const url = makeShareUrl(SAMPLE_TEXT, SAMPLE_SOURCE_TZ);
   await page.goto(url);
 
-  // Should show 4 sessions
+  // Should show 4 sessions — shared view renders them; scope to session cards only
   const sessionCards = page.locator(".bg-white.border.border-slate-200.rounded-lg");
   await expect(sessionCards.first()).toBeVisible();
   const count = await sessionCards.count();
@@ -306,9 +312,8 @@ just some words with no time`;
 
   // The "Opening Keynote" session should be present
   await expect(page.locator("text=Opening Keynote")).toBeVisible();
-  // Note: extractTitle strips colons (treated as separators per spec), so
-  // "Workshop: Building with AI" renders as "Workshop Building with AI"
-  await expect(page.locator("text=Workshop Building with AI")).toBeVisible();
+  // Round-2: extractTitle preserves internal colons, so title is "Workshop: Building with AI"
+  await expect(page.locator("text=Workshop: Building with AI")).toBeVisible();
   await expect(page.locator("text=Panel Discussion")).toBeVisible();
   await expect(page.locator("text=Community Q&A")).toBeVisible();
 
@@ -360,10 +365,12 @@ test("Out-of-range times 26:00/24:00/25:99/99:99 do NOT crash the app — flagge
   }
 
   // A valid line added after bad ones still renders
+  // Scope to the desktop panel to avoid the CSS-hidden mobile preview cards
   await textarea.fill("Talk — 26:00 UTC\n9:00 AM PT — Valid Session");
-  const sessionCards = page.locator(".bg-white.border.border-slate-200.rounded-lg");
+  const desktopPanel = page.locator('.hidden.lg\\:flex');
+  const sessionCards = desktopPanel.locator(".bg-white.border.border-slate-200.rounded-lg");
   await expect(sessionCards.first()).toBeVisible();
-  const unparsed = page.locator(".bg-amber-50");
+  const unparsed = desktopPanel.locator(".bg-amber-50");
   await expect(unparsed.first()).toBeVisible();
 });
 

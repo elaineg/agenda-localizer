@@ -10,11 +10,48 @@ import {
   encodeAgendaState,
   decodeAgendaState,
   computeDateCross,
+  localDateString,
   type ParsedSession,
   type UnparsedLine,
   type NoteLine,
 } from "../lib/parser";
 import { SAMPLE_TEXT, SAMPLE_SOURCE_TZ } from "../lib/sample";
+
+// ── H5: Human-readable slug from agenda title ─────────────────────────────
+/** Derive a URL slug from the agenda text (first heading or first session title). */
+function deriveSlug(agendaText: string): string {
+  const lines = agendaText.split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return "agenda";
+  // Take the first non-empty line as the title candidate
+  const candidate = lines[0];
+  // Strip time tokens, tz abbrs, separators
+  const cleaned = candidate
+    .replace(/\b\d{1,2}:\d{2}\s*(?:AM|PM)?\b/gi, "")
+    .replace(/\b\d{1,2}\s*(?:AM|PM)\b/gi, "")
+    .replace(/\b(?:UTC|GMT|PT|PST|PDT|ET|EST|EDT|CT|CST|CDT|MT|MST|MDT|BST|CET|CEST|IST|JST|SGT|HKT|KST|AEST|AEDT|NZST|NZDT|UK)\b/gi, "")
+    .replace(/[^a-z0-9\s-]/gi, " ")
+    .trim();
+  if (!cleaned) return "agenda";
+  // Lowercase, replace spaces with dashes, cap at 6 words
+  const slug = cleaned
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join("-");
+  return slug || "agenda";
+}
+
+/**
+ * Build a share URL with a human-readable slug prefix in the hash.
+ * Format: #<slug>.<base64payload>
+ * The slug is cosmetic — decoding uses only the payload after the last dot separator.
+ */
+function buildShareUrl(agendaText: string, sourceTimezone: string): string {
+  const payload = encodeAgendaState({ text: agendaText, sourceTimezone });
+  const slug = deriveSlug(agendaText);
+  return `${window.location.origin}${window.location.pathname}#${slug}.${payload}`;
+}
 
 // ── Timezone list ──────────────────────────────────────────────────────────
 const TZ_OPTIONS: { label: string; value: string }[] = [
@@ -158,9 +195,13 @@ function NoteRow({ row }: { row: NoteLine }) {
 function CreatorView() {
   const [text, setText] = useState(SAMPLE_TEXT);
   const [sourceTimezone, setSourceTimezone] = useState(SAMPLE_SOURCE_TZ);
-  const [copyLabel, setCopyLabel] = useState("Copy share link");
+  // H3: Copy share link state — track "idle" | "copied" for unmistakable visual flip
+  const [shareCopied, setShareCopied] = useState(false);
+  // H4: Copy as table state
+  const [tableCopied, setTableCopied] = useState(false);
   const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewerTz = useViewerTz();
 
   const rows = parseAgenda(text, { sourceTimezone });
@@ -170,39 +211,22 @@ function CreatorView() {
   const sessionCount = sessions.length;
   const unparsedCount = unparsed.length;
 
+  // H3: Copy share link — unmistakable confirmation
   const handleCopy = useCallback(() => {
-    const hash = encodeAgendaState({ text, sourceTimezone });
-    const url = `${window.location.origin}${window.location.pathname}#${hash}`;
+    const url = buildShareUrl(text, sourceTimezone);
 
     const doSetCopied = () => {
-      setCopyLabel("✓ Copied!");
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = setTimeout(() => {
-        setCopyLabel("Copy share link");
+      setShareCopied(true);
+      if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
+      shareTimerRef.current = setTimeout(() => {
+        setShareCopied(false);
       }, 2000);
     };
 
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-      navigator.clipboard.writeText(url).then(doSetCopied).catch(() => {
-        // fallback
-        try {
-          const ta = document.createElement("textarea");
-          ta.value = url;
-          ta.style.position = "fixed";
-          ta.style.opacity = "0";
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand("copy");
-          document.body.removeChild(ta);
-          doSetCopied();
-        } catch {
-          // silent
-        }
-      });
-    } else {
+    const fallbackCopy = (value: string) => {
       try {
         const ta = document.createElement("textarea");
-        ta.value = url;
+        ta.value = value;
         ta.style.position = "fixed";
         ta.style.opacity = "0";
         document.body.appendChild(ta);
@@ -213,8 +237,57 @@ function CreatorView() {
       } catch {
         // silent
       }
+    };
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(url).then(doSetCopied).catch(() => fallbackCopy(url));
+    } else {
+      fallbackCopy(url);
     }
   }, [text, sourceTimezone]);
+
+  // H4: Copy as table (TSV) — no useCallback to avoid React Compiler memoization conflict
+  const handleCopyTable = () => {
+    const header = ["Session", "Local time", "Local date", "Source time", "Source timezone"].join("\t");
+    const bodyRows = sessions.map((s) => {
+      const localTime = formatInZone(s.startUtc, viewerTz);
+      const localDate = localDateString(s.startUtc, viewerTz);
+      const sourceTime = s.sourceTime;
+      const sourceTz = sourceTimezone;
+      return [s.title, localTime, localDate, sourceTime, sourceTz].join("\t");
+    });
+    const tsv = [header, ...bodyRows].join("\n");
+
+    const doSetTableCopied = () => {
+      setTableCopied(true);
+      if (tableTimerRef.current) clearTimeout(tableTimerRef.current);
+      tableTimerRef.current = setTimeout(() => {
+        setTableCopied(false);
+      }, 2000);
+    };
+
+    const fallbackCopyTable = (value: string) => {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = value;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        doSetTableCopied();
+      } catch {
+        // silent
+      }
+    };
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(tsv).then(doSetTableCopied).catch(() => fallbackCopyTable(tsv));
+    } else {
+      fallbackCopyTable(tsv);
+    }
+  };
 
   // First 2 session cards for mobile preview
   const previewSessions = sessions.slice(0, 2);
@@ -315,24 +388,81 @@ function CreatorView() {
             </select>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={handleCopy}
-              aria-label="Copy share link"
-              aria-live="polite"
-              className="flex-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2.5 transition-colors"
-            >
-              {copyLabel}
-            </button>
-            <button
-              onClick={() => {
-                setText(SAMPLE_TEXT);
-                setSourceTimezone(SAMPLE_SOURCE_TZ);
-              }}
-              className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2.5 transition-colors"
-            >
-              Load sample
-            </button>
+          {/* H3 + H4: Copy buttons cluster */}
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              {/* H3: Copy share link — unmistakable confirmation */}
+              <button
+                onClick={handleCopy}
+                data-testid="copy-share-link"
+                aria-label="Copy share link"
+                aria-live="polite"
+                className={`flex-1 rounded-lg text-sm font-semibold px-4 py-2.5 transition-colors flex items-center justify-center gap-1.5 ${
+                  shareCopied
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    : "bg-sky-600 hover:bg-sky-700 text-white"
+                }`}
+              >
+                {shareCopied ? (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 shrink-0" aria-hidden="true">
+                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                    </svg>
+                    <span>&#10003; Copied!</span>
+                  </>
+                ) : (
+                  <span>Copy share link</span>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setText(SAMPLE_TEXT);
+                  setSourceTimezone(SAMPLE_SOURCE_TZ);
+                }}
+                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium px-4 py-2.5 transition-colors"
+              >
+                Load sample
+              </button>
+            </div>
+
+            {/* H3: Inline confirmation line */}
+            {shareCopied && (
+              <p role="status" className="text-sm text-emerald-700 font-medium">
+                Link copied — paste it anywhere
+              </p>
+            )}
+
+            {/* H4: Copy as table */}
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={handleCopyTable}
+                data-testid="copy-as-table"
+                aria-label="Copy as table"
+                aria-live="polite"
+                disabled={sessions.length === 0}
+                className={`rounded-lg border text-sm font-medium px-4 py-2 transition-colors flex items-center justify-center gap-1.5 ${
+                  tableCopied
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border-slate-300 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40"
+                }`}
+              >
+                {tableCopied ? (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 shrink-0" aria-hidden="true">
+                      <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                    </svg>
+                    <span>&#10003; Copied table!</span>
+                  </>
+                ) : (
+                  <span>Copy as table</span>
+                )}
+              </button>
+              {tableCopied && (
+                <p role="status" className="text-xs text-emerald-700">
+                  Pasted into a sheet? Columns are tab-separated.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Privacy line (G5) */}

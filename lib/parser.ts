@@ -37,28 +37,33 @@ export interface DateHeader {
 
 export type AgendaRow = ParsedSession | UnparsedLine | NoteLine | DateHeader;
 
-// ── Timezone abbreviation → IANA offset map (standard offsets; PDT/EDT etc handled) ──
+// ── Timezone abbreviation → IANA offset map ──────────────────────────────────
+// H2: Literal standard abbreviations (PST, EST, etc.) map to FIXED-offset zones
+// so "11:00 AM PST" and "19:00 UTC" are the same instant regardless of season.
+// DST-aware aliases (PT, ET, CT, MT) continue to use DST-aware IANA zones.
 const TZ_ABBR_TO_IANA: Record<string, string> = {
   UTC: "UTC",
   GMT: "UTC",
-  // Pacific
-  PT: "America/Los_Angeles",
-  PST: "America/Los_Angeles",
-  PDT: "America/Los_Angeles",
-  // Eastern
-  ET: "America/New_York",
-  EST: "America/New_York",
-  EDT: "America/New_York",
-  // Central
-  CT: "America/Chicago",
-  CST: "America/Chicago",
-  CDT: "America/Chicago",
-  // Mountain
-  MT: "America/Denver",
-  MST: "America/Denver",
-  MDT: "America/Denver",
-  // British Summer Time
+  // Pacific — DST-aware vs. fixed offset
+  PT: "America/Los_Angeles",     // DST-aware: PDT in summer, PST in winter
+  PST: "Etc/GMT+8",              // fixed UTC-8 always
+  PDT: "Etc/GMT+7",              // fixed UTC-7 always
+  // Eastern — DST-aware vs. fixed offset
+  ET: "America/New_York",        // DST-aware
+  EST: "Etc/GMT+5",              // fixed UTC-5 always
+  EDT: "Etc/GMT+4",              // fixed UTC-4 always
+  // Central — DST-aware vs. fixed offset
+  CT: "America/Chicago",         // DST-aware
+  CST: "Etc/GMT+6",              // fixed UTC-6 always
+  CDT: "Etc/GMT+5",              // fixed UTC-5 always
+  // Mountain — DST-aware vs. fixed offset
+  MT: "America/Denver",          // DST-aware
+  MST: "Etc/GMT+7",              // fixed UTC-7 always
+  MDT: "Etc/GMT+6",              // fixed UTC-6 always
+  // UK / British — alias "UK" to Europe/London (DST-aware BST/GMT)
+  UK: "Europe/London",
   BST: "Europe/London",
+  GMT_LONDON: "Europe/London",   // internal alias
   // Central European
   CET: "Europe/Paris",
   CEST: "Europe/Paris",
@@ -82,8 +87,11 @@ const TZ_ABBR_TO_IANA: Record<string, string> = {
   CST_CN: "Asia/Shanghai", // internal alias; CST abbr already used by Central
 };
 
-// All recognizable tz abbreviations (for regex)
-const ALL_TZ_ABBRS = Object.keys(TZ_ABBR_TO_IANA).filter((k) => k !== "CST_CN").join("|");
+// All recognizable tz abbreviations (for regex) — exclude internal aliases
+const INTERNAL_ALIASES = new Set(["CST_CN", "GMT_LONDON"]);
+const ALL_TZ_ABBRS = Object.keys(TZ_ABBR_TO_IANA)
+  .filter((k) => !INTERNAL_ALIASES.has(k))
+  .join("|");
 
 export const SUPPORTED_TZ_ABBRS = Object.keys(TZ_ABBR_TO_IANA);
 
@@ -250,7 +258,12 @@ const WORD_TIME_RE = /\b(noon|midnight)\b/i;
 // Time range with en-dash or hyphen
 // Handles: 9:00–9:45 AM PT, 9:00-9:45 AM PT, 9:00 AM–10:00 AM PT
 const TIME_RANGE_RE =
-  /\b(\d{1,2}:\d{2})(?:\s*(AM|PM))?\s*[–\-]\s*(\d{1,2}:\d{2})\s*(AM|PM)?\s*(UTC|GMT|PDT|PST|PT|EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|BST|CEST|CET|IST|JST|SGT|HKT|KST|AEDT|AEST|NZST|NZDT)\b/i;
+  /\b(\d{1,2}:\d{2})(?:\s*(AM|PM))?\s*[–\-]\s*(\d{1,2}:\d{2})\s*(AM|PM)?\s*(UTC|GMT|PDT|PST|PT|EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|BST|CEST|CET|IST|JST|SGT|HKT|KST|AEDT|AEST|NZST|NZDT|UK)\b/i;
+
+// H1: Bare-hour range: "9-10am", "9-10am PT", "9 - 10am ET"
+// Both numbers are bare hours; AM/PM applies to both from the end token
+const BARE_HOUR_RANGE_RE =
+  /\b(\d{1,2})\s*[–\-]\s*(\d{1,2})\s*([ap]\.?m\.?)\b(?:\s*(UTC|GMT|PDT|PST|PT|EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|BST|CEST|CET|IST|JST|SGT|HKT|KST|AEDT|AEST|NZST|NZDT|UK))?/i;
 
 interface TimeToken {
   hour: number;
@@ -384,6 +397,37 @@ function tryParseTime(
     };
   }
 
+  // H1: Try bare-hour range (e.g. "9-10am", "9-10am PT", "9 - 10 AM ET")
+  // Must be tried before BARE_HOUR_RE so "9-10am" isn't consumed as just "10am"
+  const bareRangeMatch = BARE_HOUR_RANGE_RE.exec(line);
+  if (bareRangeMatch) {
+    const startHourRaw = parseInt(bareRangeMatch[1], 10);
+    const endHourRaw = parseInt(bareRangeMatch[2], 10);
+    const rawAmPm = bareRangeMatch[3].toLowerCase().replace(/\./g, "");
+    const ampm: "AM" | "PM" = rawAmPm.startsWith("p") ? "PM" : "AM";
+    // Both bare hours must be valid 12h hours
+    if (!isValidHourMinute(startHourRaw, 0, true)) return null;
+    if (!isValidHourMinute(endHourRaw, 0, true)) return null;
+    const tzRawToken = bareRangeMatch[4]?.toUpperCase();
+    const tzMatch = tzRawToken ? tzRawToken : null;
+    const tzAbbr = (tzMatch ?? defaultTzAbbr).toUpperCase();
+    const unknownTzToken = tzMatch && !ianaFromAbbr(tzMatch) ? tzMatch : undefined;
+    const sh = applyAmPm({ hour: startHourRaw, minute: 0, ampm });
+    const eh = applyAmPm({ hour: endHourRaw, minute: 0, ampm });
+    const startDisp = `${startHourRaw}:00 ${ampm}`;
+    const endDisp = `${endHourRaw}:00 ${ampm}`;
+    const sourceDisplay = `${startDisp}–${endDisp} ${tzAbbr}`;
+    return {
+      startHour: sh,
+      startMinute: 0,
+      endHour: eh,
+      endMinute: 0,
+      tzAbbr: tzMatch ?? defaultTzAbbr,
+      sourceDisplay,
+      unknownTzToken,
+    };
+  }
+
   // Try 12-hour single time
   const h12Match = TIME_12H_RE.exec(line);
   if (h12Match) {
@@ -501,24 +545,37 @@ function extractRawTzToken(line: string, matchedTimeStr: string): string | null 
   return token;
 }
 
+// (RECOGNIZED_TZ_ABBRS_SET is derived from ALL_TZ_ABBRS for the TRAILING_TZ_RE)
+// Regex that matches only recognized TZ abbreviations at end of string (for title cleanup)
+const TRAILING_TZ_RE = new RegExp(
+  `\\s+(${ALL_TZ_ABBRS})\\s*$`,
+  "i"
+);
+
 /** Extract session title from a line after stripping the time tokens. */
 function extractTitle(line: string): string {
+  // Remove bare-hour range first (H1: must be before BARE_HOUR_RE to avoid partial match)
+  let cleaned = line.replace(BARE_HOUR_RANGE_RE, "");
   // Remove time range expression
-  let cleaned = line.replace(TIME_RANGE_RE, "");
+  cleaned = cleaned.replace(TIME_RANGE_RE, "");
   // Remove 12h time
   cleaned = cleaned.replace(TIME_12H_RE, "");
-  // Remove bare-hour time (e.g. "8pm", "7 PM")
+  // Remove bare-hour time (e.g. "8pm", "7 PM") — only the time token itself
+  // H1 FIX: BARE_HOUR_RE previously ate the preceding word; stripping the match
+  // directly removes only the matched token (e.g. "11:30am" not "SDK 11:30am")
   cleaned = cleaned.replace(BARE_HOUR_RE, "");
   // Remove word times (noon, midnight)
   cleaned = cleaned.replace(WORD_TIME_RE, "");
   // Remove 24h time
   cleaned = cleaned.replace(TIME_24H_RE, "");
-  // Remove known tz abbreviation
+  // Remove known tz abbreviation (only recognized abbrs, not arbitrary uppercase words)
   cleaned = cleaned.replace(TZ_ABBR_RE, "");
   // Strip out-of-scope trailing dual-tz remainder: "/ HH:MM ABBR" or "/ HH ABBR" patterns
   cleaned = cleaned.replace(/\s*\/\s*\d{1,2}(?::\d{2})?\s*[A-Z]{2,5}\b.*$/i, "");
-  // Remove trailing tz-like tokens (2-5 uppercase letters at the very end, after separators)
-  cleaned = cleaned.replace(/\s+[A-Z]{2,5}\s*$/, "");
+  // H1 FIX: Remove ONLY recognized tz abbreviation tokens at the end, not arbitrary words.
+  // Old code used /\s+[A-Z]{2,5}\s*$/ which ate trailing words like "SDK".
+  // Now only strip if the trailing token is a known timezone abbreviation.
+  cleaned = cleaned.replace(TRAILING_TZ_RE, "");
   // Remove leading/trailing separators (em-dash, en-dash, hyphen, @, trailing colon)
   // Trailing colon appears when line is "Title: 9:00 AM PT" — strip the trailing ":" after time removal
   // But do NOT strip internal colons (e.g. "Workshop: Building with AI")
@@ -736,6 +793,25 @@ export function encodeAgendaState(state: AgendaState): string {
 export function decodeAgendaState(hash: string): AgendaState | null {
   try {
     const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+    // H5: Support slug.payload format — find the last "." separator.
+    // The payload is always base64 (no dots); the slug may have hyphens.
+    // Strategy: try the full raw string first; if it fails, strip the slug prefix.
+    const lastDot = raw.lastIndexOf(".");
+    if (lastDot !== -1) {
+      // Try everything after the last dot as the payload
+      const afterDot = raw.slice(lastDot + 1);
+      try {
+        const decoded2 = JSON.parse(decodeURIComponent(escape(atob(afterDot))));
+        if (
+          typeof decoded2.text === "string" &&
+          typeof decoded2.sourceTimezone === "string"
+        ) {
+          return decoded2 as AgendaState;
+        }
+      } catch {
+        // fall through to try the full raw string
+      }
+    }
     const decoded = JSON.parse(decodeURIComponent(escape(atob(raw))));
     if (
       typeof decoded.text === "string" &&
