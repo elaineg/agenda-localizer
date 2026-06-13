@@ -324,6 +324,16 @@ function CreatorView() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="mt-12 pt-6 border-t border-slate-200 text-center">
+        <Link
+          href="/"
+          className="text-sm text-slate-400 hover:text-sky-600 transition-colors"
+        >
+          Make your own → Agenda Localizer
+        </Link>
+      </footer>
     </main>
   );
 }
