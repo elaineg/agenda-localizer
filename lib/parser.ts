@@ -236,6 +236,19 @@ interface TimeParseResult {
   sourceDisplay: string;
 }
 
+/** Validate hour and minute are in range. Returns true if valid. */
+function isValidHourMinute(hour: number, minute: number, is12h: boolean): boolean {
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return false;
+  if (minute < 0 || minute > 59) return false;
+  if (is12h) {
+    // 12-hour: hour must be 1–12
+    return hour >= 1 && hour <= 12;
+  } else {
+    // 24-hour: hour must be 0–23
+    return hour >= 0 && hour <= 23;
+  }
+}
+
 function tryParseTime(
   line: string,
   defaultTzAbbr: string
@@ -251,6 +264,11 @@ function tryParseTime(
 
     const start = parseHM(startStr);
     const end = parseHM(endStr);
+
+    const is12h = !!(startAp ?? endAp);
+    // Validate ranges — out-of-range hours/minutes return null (flagged as unparsed)
+    if (!isValidHourMinute(start.hour, start.minute, is12h)) return null;
+    if (!isValidHourMinute(end.hour, end.minute, is12h)) return null;
 
     // The trailing AM/PM after the end time applies to both if not individually specified
     // e.g., "9:00–9:45 AM PT" → both 9:00 AM and 9:45 AM
@@ -298,6 +316,8 @@ function tryParseTime(
   const h12Match = TIME_12H_RE.exec(line);
   if (h12Match) {
     const { hour, minute } = parseHM(`${h12Match[1]}:${h12Match[2]}`);
+    // Validate: 12-hour hour must be 1–12
+    if (!isValidHourMinute(hour, minute, true)) return null;
     const ampm = h12Match[3].toUpperCase() as "AM" | "PM";
     const tzMatch = TZ_ABBR_RE.exec(line);
     const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
@@ -318,6 +338,8 @@ function tryParseTime(
   if (h24Match) {
     const hour = parseInt(h24Match[1], 10);
     const minute = parseInt(h24Match[2], 10);
+    // Validate: 24-hour hour must be 0–23, minute 0–59
+    if (!isValidHourMinute(hour, minute, false)) return null;
     const tzMatch = TZ_ABBR_RE.exec(line);
     const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
     const sourceDisplay = `${h24Match[1]}:${h24Match[2]} ${tzAbbr}`;
@@ -344,10 +366,12 @@ function extractTitle(line: string): string {
   cleaned = cleaned.replace(TIME_24H_RE, "");
   // Remove standalone tz abbreviation
   cleaned = cleaned.replace(TZ_ABBR_RE, "");
+  // Strip out-of-scope trailing dual-tz remainder: "/ HH:MM ABBR" or "/ HH ABBR" patterns
+  cleaned = cleaned.replace(/\s*\/\s*\d{1,2}(?::\d{2})?\s*[A-Z]{2,5}\b.*$/i, "");
   // Remove separators (em-dash, en-dash, hyphen, colon) at boundaries
   cleaned = cleaned.replace(/^\s*[–—\-:]+\s*/, "").replace(/\s*[–—\-:]+\s*$/, "");
   cleaned = cleaned.replace(/\s*[–—\-:]+\s*/g, " ").trim();
-  return cleaned || "Session";
+  return cleaned || "Untitled session";
 }
 
 // ── Main parse function ───────────────────────────────────────────────────

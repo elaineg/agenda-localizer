@@ -40,13 +40,25 @@ function getHashServer() {
   return "";
 }
 
-// ── Viewer timezone (read once, stable) ────────────────────────────────────
-function getViewerTz() {
+// ── Viewer timezone (client-only to avoid hydration mismatch) ─────────────
+// Server snapshot is always "UTC"; client snapshot is the real browser timezone.
+// useSyncExternalStore keeps them stable so React never hydration-mismatches.
+function subscribeToTzChange(/* _cb: () => void */) {
+  // Timezone never changes mid-session; no-op subscription is fine.
+  return () => {};
+}
+function getClientTz() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {
     return "UTC";
   }
+}
+function getServerTz() {
+  return "UTC";
+}
+function useViewerTz() {
+  return useSyncExternalStore(subscribeToTzChange, getClientTz, getServerTz);
 }
 
 // ── SessionCard ────────────────────────────────────────────────────────────
@@ -118,7 +130,7 @@ function CreatorView() {
   const [sourceTimezone, setSourceTimezone] = useState(SAMPLE_SOURCE_TZ);
   const [copyLabel, setCopyLabel] = useState("Copy share link");
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const viewerTz = getViewerTz();
+  const viewerTz = useViewerTz();
 
   const rows = parseAgenda(text, { sourceTimezone });
 
@@ -319,7 +331,7 @@ function CreatorView() {
 // ── Shared / attendee view ─────────────────────────────────────────────────
 function SharedView({ hash }: { hash: string }) {
   const state = decodeAgendaState(hash);
-  const viewerTz = getViewerTz();
+  const viewerTz = useViewerTz();
 
   if (!state) {
     return (
@@ -396,7 +408,7 @@ function SharedView({ hash }: { hash: string }) {
           href="/"
           className="text-sm text-slate-400 hover:text-sky-600 transition-colors"
         >
-          Made with → Agenda Localizer
+          Make your own → Agenda Localizer
         </Link>
       </footer>
     </main>

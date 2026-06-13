@@ -218,6 +218,64 @@ describe("Out-of-scope: dual-timezone per line — first tz wins", () => {
     // 12:00 PM EDT = 16:00 UTC
     expect(utcHM(s.startUtc)).toEqual({ h: 16, m: 0 });
   });
+
+  it("strips dual-tz remainder from title: `Talk — 12:00 ET / 17:00 BST`", () => {
+    const rows = parseAgenda("Talk — 12:00 ET / 17:00 BST", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const s = rows[0] as ParsedSession;
+    expect(s.type).toBe("session");
+    expect(s.title).toBe("Talk");
+  });
+});
+
+describe("Out-of-range time values — must flag as unparsed, never crash", () => {
+  it("flags `Talk — 26:00 UTC` as unparsed (hour 26 out of range)", () => {
+    const rows = parseAgenda("Talk — 26:00 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("unparsed");
+  });
+
+  it("flags `Talk — 25:99 UTC` as unparsed (hour 25, minute 99 both out of range)", () => {
+    const rows = parseAgenda("Talk — 25:99 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("unparsed");
+  });
+
+  it("flags `99:99 UTC` as unparsed", () => {
+    const rows = parseAgenda("99:99 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("unparsed");
+  });
+
+  it("flags `24:00 UTC` as unparsed (24 is not valid in 0–23 range)", () => {
+    const rows = parseAgenda("24:00 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("unparsed");
+  });
+
+  it("parses valid boundary `23:59 UTC` correctly", () => {
+    const rows = parseAgenda("23:59 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("session");
+    const s = rows[0] as ParsedSession;
+    expect(utcHM(s.startUtc)).toEqual({ h: 23, m: 59 });
+  });
+
+  it("parses valid boundary `00:00 UTC` correctly", () => {
+    const rows = parseAgenda("00:00 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("session");
+    const s = rows[0] as ParsedSession;
+    expect(utcHM(s.startUtc)).toEqual({ h: 0, m: 0 });
+  });
+
+  it("keeps other valid sessions when an out-of-range line is present", () => {
+    const text = "9:00 AM PT\nTalk — 26:00 UTC\n5:00 PM ET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(3);
+    expect(rows[0].type).toBe("session");
+    expect(rows[1].type).toBe("unparsed");
+    expect(rows[2].type).toBe("session");
+  });
 });
 
 describe("Calendar link helpers", () => {
