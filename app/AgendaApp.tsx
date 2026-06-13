@@ -9,8 +9,10 @@ import {
   buildIcsContent,
   encodeAgendaState,
   decodeAgendaState,
+  computeDateCross,
   type ParsedSession,
   type UnparsedLine,
+  type NoteLine,
 } from "../lib/parser";
 import { SAMPLE_TEXT, SAMPLE_SOURCE_TZ } from "../lib/sample";
 
@@ -25,6 +27,7 @@ const TZ_OPTIONS: { label: string; value: string }[] = [
   { label: "CET/CEST (Europe/Paris)", value: "Europe/Paris" },
   { label: "IST (Asia/Kolkata)", value: "Asia/Kolkata" },
   { label: "JST (Asia/Tokyo)", value: "Asia/Tokyo" },
+  { label: "SGT (Asia/Singapore)", value: "Asia/Singapore" },
   { label: "AEST (Australia/Sydney)", value: "Australia/Sydney" },
 ];
 
@@ -61,22 +64,46 @@ function useViewerTz() {
   return useSyncExternalStore(subscribeToTzChange, getClientTz, getServerTz);
 }
 
-// ── SessionCard ────────────────────────────────────────────────────────────
-function SessionCard({
-  session,
-  viewerTz,
-  isSharedView,
-}: {
-  session: ParsedSession;
-  viewerTz: string;
-  isSharedView: boolean;
-}) {
-  const localTime = formatInZone(session.startUtc, viewerTz);
-  const localEnd = session.endUtc ? formatInZone(session.endUtc, viewerTz) : null;
+// ── CalendarButtons ────────────────────────────────────────────────────────
+function CalendarButtons({ session }: { session: ParsedSession }) {
   const gcUrl = buildGoogleCalendarUrl(session);
   const icsContent = buildIcsContent(session);
   const icsDataUrl = `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
   const filename = `${session.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.ics`;
+  return (
+    <div className="flex flex-col gap-1.5 shrink-0 mt-0.5">
+      <a
+        href={gcUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md whitespace-nowrap"
+      >
+        Add to Google Calendar
+      </a>
+      <a
+        href={icsDataUrl}
+        download={filename}
+        className="text-xs px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md whitespace-nowrap text-center"
+      >
+        Download .ics
+      </a>
+    </div>
+  );
+}
+
+// ── SessionCard ────────────────────────────────────────────────────────────
+function SessionCard({
+  session,
+  viewerTz,
+  showCalendar,
+}: {
+  session: ParsedSession;
+  viewerTz: string;
+  showCalendar: boolean;
+}) {
+  const localTime = formatInZone(session.startUtc, viewerTz);
+  const localEnd = session.endUtc ? formatInZone(session.endUtc, viewerTz) : null;
+  const dateCross = computeDateCross(session, viewerTz);
 
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
@@ -86,30 +113,25 @@ function SessionCard({
           <p className="mt-1 text-lg font-bold text-sky-700">
             {localEnd ? `${localTime} – ${localEnd}` : localTime}
             <span className="text-xs font-normal text-slate-500 ml-1">(your time)</span>
+            {dateCross && (
+              <span className="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                {dateCross}
+              </span>
+            )}
           </p>
           <p className="text-sm text-slate-500 mt-0.5">
             {session.sourceTime}
           </p>
+          {session.unknownTzToken && (
+            <p
+              role="status"
+              className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 inline-block"
+            >
+              {`Unknown timezone '${session.unknownTzToken}' — using source tz`}
+            </p>
+          )}
         </div>
-        {isSharedView && (
-          <div className="flex flex-col gap-1.5 shrink-0 mt-0.5">
-            <a
-              href={gcUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md whitespace-nowrap"
-            >
-              Add to Google Calendar
-            </a>
-            <a
-              href={icsDataUrl}
-              download={filename}
-              className="text-xs px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md whitespace-nowrap text-center"
-            >
-              Download .ics
-            </a>
-          </div>
-        )}
+        {showCalendar && <CalendarButtons session={session} />}
       </div>
     </div>
   );
@@ -117,10 +139,18 @@ function SessionCard({
 
 function UnparsedCard({ row }: { row: UnparsedLine }) {
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+    <div role="alert" className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
       <span className="text-amber-800 font-medium">{row.rawLine}</span>
-      <span className="text-amber-600 ml-2">— {row.hint}</span>
+      <span className="text-amber-600 ml-2">{"— "}{row.hint}</span>
     </div>
+  );
+}
+
+function NoteRow({ row }: { row: NoteLine }) {
+  return (
+    <p className="text-xs text-slate-400 italic px-1 py-0.5">
+      {row.rawLine}
+    </p>
   );
 }
 
@@ -129,6 +159,7 @@ function CreatorView() {
   const [text, setText] = useState(SAMPLE_TEXT);
   const [sourceTimezone, setSourceTimezone] = useState(SAMPLE_SOURCE_TZ);
   const [copyLabel, setCopyLabel] = useState("Copy share link");
+  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewerTz = useViewerTz();
 
@@ -185,6 +216,9 @@ function CreatorView() {
     }
   }, [text, sourceTimezone]);
 
+  // First 2 session cards for mobile preview
+  const previewSessions = sessions.slice(0, 2);
+
   return (
     <main className="flex-1 w-full">
       {/* Hero */}
@@ -196,6 +230,46 @@ function CreatorView() {
           Paste your sessions, share one link — each person sees their own local time.
         </p>
       </div>
+
+      {/* Mobile compact preview — shown above the fold on small screens */}
+      {sessionCount > 0 && (
+        <div className="lg:hidden bg-slate-50 border-b border-slate-200 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Preview ({sessionCount} session{sessionCount !== 1 ? "s" : ""})
+            </span>
+            <button
+              onClick={() => setMobilePreviewExpanded((v) => !v)}
+              className="text-xs text-sky-600 hover:text-sky-800"
+            >
+              {mobilePreviewExpanded ? "Collapse" : "See all"}
+            </button>
+          </div>
+          <div
+            role="status"
+            aria-label="Detected viewer timezone"
+            className="text-xs text-slate-500 mb-2"
+          >
+            Your timezone:{" "}
+            <span className="font-medium text-slate-700">{viewerTz}</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {(mobilePreviewExpanded ? sessions : previewSessions).map((s, i) => (
+              <SessionCard
+                key={i}
+                session={s}
+                viewerTz={viewerTz}
+                showCalendar={true}
+              />
+            ))}
+            {!mobilePreviewExpanded && sessionCount > 2 && (
+              <p className="text-xs text-slate-400 text-center">
+                + {sessionCount - 2} more
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="max-w-5xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Editor */}
@@ -213,7 +287,7 @@ function CreatorView() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={14}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono text-slate-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 resize-none"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono text-slate-800 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400 resize-none lg:rows-14 rows-8"
               placeholder={"Session 3 — 16:00 UTC\n9:00 AM PT — Keynote\n9:00–9:45 AM PT Workshop"}
               aria-label="Agenda text"
             />
@@ -260,10 +334,16 @@ function CreatorView() {
               Load sample
             </button>
           </div>
+
+          {/* Privacy line (G5) */}
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Runs entirely in your browser; nothing is uploaded — your agenda travels inside the link itself.{" "}
+            <span className="text-slate-400">The share link contains your full agenda.</span>
+          </p>
         </div>
 
-        {/* Right: Preview */}
-        <div className="flex flex-col gap-3">
+        {/* Right: Localized preview (desktop) */}
+        <div className="hidden lg:flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-700">Localized preview</h2>
             <div role="status" className="text-xs text-slate-500">
@@ -308,6 +388,9 @@ function CreatorView() {
                     </p>
                   );
                 }
+                if (row.type === "note") {
+                  return <NoteRow key={i} row={row} />;
+                }
                 if (row.type === "unparsed") {
                   return <UnparsedCard key={i} row={row} />;
                 }
@@ -316,7 +399,56 @@ function CreatorView() {
                     key={i}
                     session={row}
                     viewerTz={viewerTz}
-                    isSharedView={false}
+                    showCalendar={true}
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Right: Localized preview (mobile — full list below editor) */}
+        <div className="lg:hidden flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-700">Full localized preview</h2>
+            <div role="status" className="text-xs text-slate-500">
+              {sessionCount > 0 || unparsedCount > 0 ? (
+                <>
+                  {sessionCount} session{sessionCount !== 1 ? "s" : ""}
+                  {unparsedCount > 0 && (
+                    <>{" "}·{" "}<span className="text-amber-600">{unparsedCount} line{unparsedCount !== 1 ? "s" : ""} need{unparsedCount === 1 ? "s" : ""} a time</span></>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {text.trim() === "" ? (
+              <div className="bg-white border border-dashed border-slate-300 rounded-lg p-6 text-center text-slate-400 text-sm">
+                <p>Paste an agenda to see localized sessions.</p>
+              </div>
+            ) : (
+              rows.map((row, i) => {
+                if (row.type === "dateheader") {
+                  return (
+                    <p key={i} className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-1">
+                      {row.rawLine}
+                    </p>
+                  );
+                }
+                if (row.type === "note") {
+                  return <NoteRow key={i} row={row} />;
+                }
+                if (row.type === "unparsed") {
+                  return <UnparsedCard key={i} row={row} />;
+                }
+                return (
+                  <SessionCard
+                    key={i}
+                    session={row}
+                    viewerTz={viewerTz}
+                    showCalendar={true}
                   />
                 );
               })
@@ -392,15 +524,19 @@ function SharedView({ hash }: { hash: string }) {
               </p>
             );
           }
+          if (row.type === "note") {
+            return <NoteRow key={i} row={row} />;
+          }
+          // G2: NEVER render unparsed warning cards in shared view — omit them entirely
           if (row.type === "unparsed") {
-            return <UnparsedCard key={i} row={row} />;
+            return null;
           }
           return (
             <SessionCard
               key={i}
               session={row}
               viewerTz={viewerTz}
-              isSharedView={true}
+              showCalendar={true}
             />
           );
         })}

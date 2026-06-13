@@ -11,6 +11,10 @@ export interface ParsedSession {
   endUtc: Date | null;
   sourceTime: string; // e.g. "16:00 UTC" — display string
   rawLine: string;
+  /** True if localized time lands on a different calendar day than the source date */
+  dateCross?: "+1 day" | "-1 day";
+  /** If the per-line tz token was not recognized, this holds the unknown token string */
+  unknownTzToken?: string;
 }
 
 export interface UnparsedLine {
@@ -19,13 +23,19 @@ export interface UnparsedLine {
   hint: string;
 }
 
+/** A line with no detectable time — section headers, notes, "lunch", "TBD", etc. */
+export interface NoteLine {
+  type: "note";
+  rawLine: string;
+}
+
 export interface DateHeader {
   type: "dateheader";
   rawLine: string;
   date: string; // YYYY-MM-DD
 }
 
-export type AgendaRow = ParsedSession | UnparsedLine | DateHeader;
+export type AgendaRow = ParsedSession | UnparsedLine | NoteLine | DateHeader;
 
 // ── Timezone abbreviation → IANA offset map (standard offsets; PDT/EDT etc handled) ──
 const TZ_ABBR_TO_IANA: Record<string, string> = {
@@ -56,10 +66,24 @@ const TZ_ABBR_TO_IANA: Record<string, string> = {
   IST: "Asia/Kolkata",
   // Japan
   JST: "Asia/Tokyo",
+  // Singapore
+  SGT: "Asia/Singapore",
+  // Hong Kong
+  HKT: "Asia/Hong_Kong",
+  // Korea
+  KST: "Asia/Seoul",
   // Australia Eastern
   AEST: "Australia/Sydney",
   AEDT: "Australia/Sydney",
+  // New Zealand
+  NZST: "Pacific/Auckland",
+  NZDT: "Pacific/Auckland",
+  // China Standard Time
+  CST_CN: "Asia/Shanghai", // internal alias; CST abbr already used by Central
 };
+
+// All recognizable tz abbreviations (for regex)
+const ALL_TZ_ABBRS = Object.keys(TZ_ABBR_TO_IANA).filter((k) => k !== "CST_CN").join("|");
 
 export const SUPPORTED_TZ_ABBRS = Object.keys(TZ_ABBR_TO_IANA);
 
@@ -157,6 +181,19 @@ export function formatInZone(
   return fmt.format(utcDate);
 }
 
+/**
+ * Get the calendar date (YYYY-MM-DD) of a UTC timestamp in a given IANA zone.
+ */
+export function localDateString(utcDate: Date, ianaZone: string): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ianaZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(utcDate); // en-CA → YYYY-MM-DD
+}
+
 // ── Date header detection ──────────────────────────────────────────────────
 
 const ISO_DATE_RE = /^\s*(\d{4}-\d{2}-\d{2})\s*$/;
@@ -190,9 +227,12 @@ function tryParseDateHeader(line: string): string | null {
 
 // ── Time parsing ──────────────────────────────────────────────────────────
 
-// Matches timezone abbreviation at end of time expression
-const TZ_ABBR_RE =
-  /\b(UTC|GMT|PDT|PST|PT|EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|BST|CEST|CET|IST|JST|AEDT|AEST)\b/i;
+// Matches a known timezone abbreviation token
+const TZ_ABBR_RE = new RegExp(
+  `\\b(${ALL_TZ_ABBRS})\\b`,
+  "i"
+);
+
 
 // 24-hour: 16:00 or 9:30
 const TIME_24H_RE = /\b(\d{1,2}):(\d{2})\b(?!\s*(?:AM|PM))/i;
@@ -200,10 +240,17 @@ const TIME_24H_RE = /\b(\d{1,2}):(\d{2})\b(?!\s*(?:AM|PM))/i;
 // 12-hour: 9:00 AM or 5:00 PM
 const TIME_12H_RE = /\b(\d{1,2}):(\d{2})\s*(AM|PM)\b/i;
 
+// Bare-hour 12h: "8pm", "7 PM", "9am", "11 p.m.", "4 PM"
+// Optionally followed by a tz token
+const BARE_HOUR_RE = /\b(\d{1,2})\s*([ap]\.?m\.?)\b/i;
+
+// Word times: "noon" or "midnight"
+const WORD_TIME_RE = /\b(noon|midnight)\b/i;
+
 // Time range with en-dash or hyphen
 // Handles: 9:00–9:45 AM PT, 9:00-9:45 AM PT, 9:00 AM–10:00 AM PT
 const TIME_RANGE_RE =
-  /\b(\d{1,2}:\d{2})(?:\s*(AM|PM))?\s*[–\-]\s*(\d{1,2}:\d{2})\s*(AM|PM)?\s*(UTC|GMT|PDT|PST|PT|EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|BST|CEST|CET|IST|JST|AEDT|AEST)\b/i;
+  /\b(\d{1,2}:\d{2})(?:\s*(AM|PM))?\s*[–\-]\s*(\d{1,2}:\d{2})\s*(AM|PM)?\s*(UTC|GMT|PDT|PST|PT|EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|BST|CEST|CET|IST|JST|SGT|HKT|KST|AEDT|AEST|NZST|NZDT)\b/i;
 
 interface TimeToken {
   hour: number;
@@ -234,6 +281,7 @@ interface TimeParseResult {
   endMinute: number | null;
   tzAbbr: string;
   sourceDisplay: string;
+  unknownTzToken?: string; // if the tz token in the line wasn't recognized
 }
 
 /** Validate hour and minute are in range. Returns true if valid. */
@@ -247,6 +295,26 @@ function isValidHourMinute(hour: number, minute: number, is12h: boolean): boolea
     // 24-hour: hour must be 0–23
     return hour >= 0 && hour <= 23;
   }
+}
+
+/**
+ * Detect if a line clearly intends a time but is malformed.
+ * Returns true if the line contains a number that looks like it's trying to be a time
+ * (e.g. "26:00 UTC", "99:99 PDT", "Session 4 — 99:99").
+ * Does NOT flag plain text lines with no numeric time intent.
+ */
+function lineHasmalformedTimeIntent(line: string): boolean {
+  // Must have a colon-separated number that looks like an attempted time HH:MM
+  // and optionally a tz abbr or AM/PM — indicating time intent
+  // Pattern: digits:digits where either the hour or minute is out of range
+  const attemptedTime = /\b(\d{1,3}):(\d{1,3})\b/;
+  const m = attemptedTime.exec(line);
+  if (!m) return false;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  // If they're both in normal 24h range it would have been parsed; reaching here means
+  // the match exists but was rejected by the parser — treat as malformed
+  return h > 23 || min > 59;
 }
 
 function tryParseTime(
@@ -302,6 +370,9 @@ function tryParseTime(
         : endStr;
     const sourceDisplay = `${startDisp}–${endDisp} ${tzAbbr}`;
 
+    // Check if tz is recognized
+    const unknownTzToken = ianaFromAbbr(tzAbbr) ? undefined : tzAbbr;
+
     return {
       startHour: sh,
       startMinute: start.minute,
@@ -309,6 +380,7 @@ function tryParseTime(
       endMinute: end.minute,
       tzAbbr,
       sourceDisplay,
+      unknownTzToken,
     };
   }
 
@@ -320,7 +392,9 @@ function tryParseTime(
     if (!isValidHourMinute(hour, minute, true)) return null;
     const ampm = h12Match[3].toUpperCase() as "AM" | "PM";
     const tzMatch = TZ_ABBR_RE.exec(line);
+    const rawTzToken = extractRawTzToken(line, h12Match[0]);
     const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
+    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
     const sh = applyAmPm({ hour, minute, ampm });
     const sourceDisplay = `${h12Match[1]}:${h12Match[2]} ${ampm} ${tzAbbr}`;
     return {
@@ -328,8 +402,54 @@ function tryParseTime(
       startMinute: minute,
       endHour: null,
       endMinute: null,
-      tzAbbr,
+      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
       sourceDisplay,
+      unknownTzToken,
+    };
+  }
+
+  // Try bare-hour 12h: "8pm", "7 PM", "9am", "11 p.m.", "4 PM ET"
+  const bareMatch = BARE_HOUR_RE.exec(line);
+  if (bareMatch) {
+    const hour = parseInt(bareMatch[1], 10);
+    if (!isValidHourMinute(hour, 0, true)) return null;
+    const rawAmPm = bareMatch[2].toLowerCase().replace(/\./g, "");
+    const ampm: "AM" | "PM" = rawAmPm.startsWith("p") ? "PM" : "AM";
+    const tzMatch = TZ_ABBR_RE.exec(line);
+    const rawTzToken = extractRawTzToken(line, bareMatch[0]);
+    const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
+    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
+    const sh = applyAmPm({ hour, minute: 0, ampm });
+    const sourceDisplay = `${hour}:00 ${ampm} ${tzMatch ? tzAbbr : defaultTzAbbr}`;
+    return {
+      startHour: sh,
+      startMinute: 0,
+      endHour: null,
+      endMinute: null,
+      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
+      sourceDisplay,
+      unknownTzToken,
+    };
+  }
+
+  // Try word times: "noon" or "midnight"
+  const wordMatch = WORD_TIME_RE.exec(line);
+  if (wordMatch) {
+    const word = wordMatch[1].toLowerCase();
+    const hour = word === "noon" ? 12 : 0;
+    const tzMatch = TZ_ABBR_RE.exec(line);
+    const rawTzToken = extractRawTzToken(line, wordMatch[0]);
+    const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
+    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
+    const sourceDisplay = `${word} ${tzMatch ? tzAbbr : defaultTzAbbr}`;
+    return {
+      startHour: hour,
+      startMinute: 0,
+      endHour: null,
+      endMinute: null,
+      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
+      sourceDisplay,
+      unknownTzToken,
     };
   }
 
@@ -341,19 +461,44 @@ function tryParseTime(
     // Validate: 24-hour hour must be 0–23, minute 0–59
     if (!isValidHourMinute(hour, minute, false)) return null;
     const tzMatch = TZ_ABBR_RE.exec(line);
+    const rawTzToken = extractRawTzToken(line, h24Match[0]);
     const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
-    const sourceDisplay = `${h24Match[1]}:${h24Match[2]} ${tzAbbr}`;
+    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
+    const sourceDisplay = `${h24Match[1]}:${h24Match[2]} ${tzMatch ? tzAbbr : defaultTzAbbr}`;
     return {
       startHour: hour,
       startMinute: minute,
       endHour: null,
       endMinute: null,
-      tzAbbr,
+      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
       sourceDisplay,
+      unknownTzToken,
     };
   }
 
   return null;
+}
+
+/**
+ * After matching a time token in a line, look for a trailing ALL-CAPS token
+ * that might be an unrecognized timezone (e.g. "XYZ" in "9:00 AM XYZ").
+ * Returns the token if found and not recognized, null otherwise.
+ */
+function extractRawTzToken(line: string, matchedTimeStr: string): string | null {
+  // Look at what comes after the time match
+  const idx = line.indexOf(matchedTimeStr);
+  if (idx < 0) return null;
+  const after = line.slice(idx + matchedTimeStr.length).trim();
+  // Check for a 2-5 letter word that looks like a tz abbr at start of remainder
+  const m = /^([A-Z]{2,5})\b/i.exec(after);
+  if (!m) return null;
+  const token = m[1].toUpperCase();
+  // Only flag if it's NOT a recognized tz abbr
+  if (ianaFromAbbr(token)) return null;
+  // Don't flag common English words
+  const COMMON_WORDS = new Set(["AM", "PM", "THE", "AND", "FOR", "WITH", "OPEN", "CALL", "TALK"]);
+  if (COMMON_WORDS.has(token)) return null;
+  return token;
 }
 
 /** Extract session title from a line after stripping the time tokens. */
@@ -362,15 +507,24 @@ function extractTitle(line: string): string {
   let cleaned = line.replace(TIME_RANGE_RE, "");
   // Remove 12h time
   cleaned = cleaned.replace(TIME_12H_RE, "");
+  // Remove bare-hour time (e.g. "8pm", "7 PM")
+  cleaned = cleaned.replace(BARE_HOUR_RE, "");
+  // Remove word times (noon, midnight)
+  cleaned = cleaned.replace(WORD_TIME_RE, "");
   // Remove 24h time
   cleaned = cleaned.replace(TIME_24H_RE, "");
-  // Remove standalone tz abbreviation
+  // Remove known tz abbreviation
   cleaned = cleaned.replace(TZ_ABBR_RE, "");
   // Strip out-of-scope trailing dual-tz remainder: "/ HH:MM ABBR" or "/ HH ABBR" patterns
   cleaned = cleaned.replace(/\s*\/\s*\d{1,2}(?::\d{2})?\s*[A-Z]{2,5}\b.*$/i, "");
-  // Remove separators (em-dash, en-dash, hyphen, colon) at boundaries
-  cleaned = cleaned.replace(/^\s*[–—\-:]+\s*/, "").replace(/\s*[–—\-:]+\s*$/, "");
-  cleaned = cleaned.replace(/\s*[–—\-:]+\s*/g, " ").trim();
+  // Remove trailing tz-like tokens (2-5 uppercase letters at the very end, after separators)
+  cleaned = cleaned.replace(/\s+[A-Z]{2,5}\s*$/, "");
+  // Remove leading/trailing separators (em-dash, en-dash, hyphen, @, trailing colon)
+  // Trailing colon appears when line is "Title: 9:00 AM PT" — strip the trailing ":" after time removal
+  // But do NOT strip internal colons (e.g. "Workshop: Building with AI")
+  cleaned = cleaned.replace(/^\s*[–—\-@:]+\s*/, "").replace(/\s*[–—\-@:]+\s*$/, "");
+  // Replace dash-type separators in body with a space (preserving internal colons)
+  cleaned = cleaned.replace(/\s*[–—\-]+\s*/g, " ").trim();
   return cleaned || "Untitled session";
 }
 
@@ -418,11 +572,17 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
     const timeParse = tryParseTime(trimmed, defaultAbbr);
 
     if (!timeParse) {
-      rows.push({
-        type: "unparsed",
-        rawLine: trimmed,
-        hint: "Couldn't read a time — add a time like `16:00 UTC` or `9:00 AM PT`",
-      });
+      // Distinguish: does this line INTEND a time (malformed) or is it just a note/header?
+      if (lineHasmalformedTimeIntent(trimmed)) {
+        rows.push({
+          type: "unparsed",
+          rawLine: trimmed,
+          hint: "Couldn't read a time — try `16:00 UTC` or `4 PM ET`",
+        });
+      } else {
+        // Timeless line: render as a note/header, NOT an error
+        rows.push({ type: "note", rawLine: trimmed });
+      }
       continue;
     }
 
@@ -438,8 +598,8 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
       day = parts[2];
     }
 
-    // Resolve timezone
-    const iana = ianaFromAbbr(timeParse.tzAbbr) ?? sourceIana;
+    // Resolve timezone — if unrecognized, fall back to source tz but flag it
+    const resolvedIana = ianaFromAbbr(timeParse.tzAbbr) ?? sourceIana;
 
     // Convert wall time to UTC
     const startUtc = wallToUtc(
@@ -448,7 +608,7 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
       day,
       timeParse.startHour,
       timeParse.startMinute,
-      iana
+      resolvedIana
     );
 
     let endUtc: Date | null = null;
@@ -459,23 +619,56 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
         day,
         timeParse.endHour,
         timeParse.endMinute,
-        iana
+        resolvedIana
       );
     }
 
+    // Compute date-cross badge: compare source calendar date vs localized calendar date
+    // Source date is the year/month/day resolved above
+    const sourceDateStr = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dateCross: ParsedSession["dateCross"] = undefined;
+    // dateCross is computed per-viewer in the component via computeDateCross().
+
     const title = extractTitle(trimmed);
 
-    rows.push({
+    const session: ParsedSession = {
       type: "session",
       title,
       startUtc,
       endUtc,
       sourceTime: timeParse.sourceDisplay,
       rawLine: trimmed,
-    });
+      dateCross, // will be computed per viewer in the component
+    };
+
+    // Attach unknown tz token if present
+    if (timeParse.unknownTzToken) {
+      session.unknownTzToken = timeParse.unknownTzToken;
+    }
+
+    // Store source date for cross-day detection (as a hidden field)
+    (session as ParsedSession & { _sourceDateStr?: string })._sourceDateStr = sourceDateStr;
+
+    rows.push(session);
   }
 
   return rows;
+}
+
+/**
+ * Compute the date-cross badge for a session relative to a viewer's timezone.
+ * Compares the session's source calendar date to the localized calendar date.
+ */
+export function computeDateCross(
+  session: ParsedSession,
+  viewerTz: string
+): "+1 day" | "-1 day" | undefined {
+  const sourceDateStr = (session as ParsedSession & { _sourceDateStr?: string })._sourceDateStr;
+  if (!sourceDateStr) return undefined;
+  const localDateStr = localDateString(session.startUtc, viewerTz);
+  if (localDateStr > sourceDateStr) return "+1 day";
+  if (localDateStr < sourceDateStr) return "-1 day";
+  return undefined;
 }
 
 // ── Calendar helpers ───────────────────────────────────────────────────────

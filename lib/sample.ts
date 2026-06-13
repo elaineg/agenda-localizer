@@ -13,6 +13,6 @@ Opening Keynote — 16:00 UTC
 Workshop: Building with AI — 17:30 UTC
 Panel Discussion — 9:00 AM PT
 Community Q&A — 5:00 PM ET
-just some words with no time`;
+Networking Lunch`;
 
 export const SAMPLE_SOURCE_TZ = "UTC";
