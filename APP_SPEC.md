@@ -37,4 +37,4 @@ Out of scope:
 - No real-time sync: the shared view reflects the URL it was opened with (re-copy to update).
 - No dual-timezone-per-line rendering (first timezone wins) and no non-English locale parsing.
 
-Production URL: <filled in by deployer>
+Production URL: https://agenda-localizer-elainegao.vercel.app
