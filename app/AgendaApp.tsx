@@ -5,8 +5,10 @@ import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import {
   parseAgenda,
   formatInZone,
+  formatSourceDate,
   buildGoogleCalendarUrl,
   buildIcsContent,
+  buildAllSessionsIcs,
   encodeAgendaState,
   decodeAgendaState,
   computeDateCross,
@@ -51,6 +53,25 @@ function buildShareUrl(agendaText: string, sourceTimezone: string): string {
   const payload = encodeAgendaState({ text: agendaText, sourceTimezone });
   const slug = deriveSlug(agendaText);
   return `${window.location.origin}${window.location.pathname}#${slug}.${payload}`;
+}
+
+/** Derive a filename for the combined .ics from the agenda text title. */
+function deriveIcsFilename(agendaText: string): string {
+  const slug = deriveSlug(agendaText);
+  return `${slug}.ics`;
+}
+
+/** Trigger a client-side download of a string as a file. */
+function downloadString(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ── Timezone list ──────────────────────────────────────────────────────────
@@ -141,6 +162,8 @@ function SessionCard({
   const localTime = formatInZone(session.startUtc, viewerTz);
   const localEnd = session.endUtc ? formatInZone(session.endUtc, viewerTz) : null;
   const dateCross = computeDateCross(session, viewerTz);
+  // Per-card parsed date label for auditability (fix: item 2)
+  const parsedDateLabel = formatSourceDate(session.sourceDateStr);
 
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
@@ -156,15 +179,34 @@ function SessionCard({
               </span>
             )}
           </p>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {session.sourceTime}
-          </p>
+          {/* Per-card parsed date label — auditable before download */}
+          {parsedDateLabel && (
+            <p
+              data-testid="session-parsed-date"
+              className="text-xs text-slate-500 mt-0.5"
+            >
+              {parsedDateLabel} &middot; <span className="text-slate-400">{session.sourceTime}</span>
+            </p>
+          )}
+          {!parsedDateLabel && (
+            <p className="text-sm text-slate-500 mt-0.5">
+              {session.sourceTime}
+            </p>
+          )}
           {session.unknownTzToken && (
             <p
               role="status"
               className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 inline-block"
             >
               {`Unknown timezone '${session.unknownTzToken}' — using source tz`}
+            </p>
+          )}
+          {session.hasNoDate && (
+            <p
+              role="alert"
+              className="mt-1 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-0.5 inline-block"
+            >
+              No date found — add a date header line (e.g. <code>2026-06-23</code>) above these sessions
             </p>
           )}
         </div>
@@ -191,6 +233,23 @@ function NoteRow({ row }: { row: NoteLine }) {
   );
 }
 
+/** A date-header row rendered with a visible "DATE" micro-label so users see their line was accounted for (fix: item 1). */
+function DateHeaderRow({ rawLine }: { rawLine: string }) {
+  return (
+    <div
+      data-testid="date-header-row"
+      className="flex items-center gap-2 pt-1"
+      role="status"
+      aria-label={`Date header: ${rawLine}`}
+    >
+      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest shrink-0">DATE</span>
+      <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide truncate">
+        {rawLine}
+      </p>
+    </div>
+  );
+}
+
 // ── Creator view ───────────────────────────────────────────────────────────
 function CreatorView() {
   const [text, setText] = useState(SAMPLE_TEXT);
@@ -199,9 +258,12 @@ function CreatorView() {
   const [shareCopied, setShareCopied] = useState(false);
   // H4: Copy as table state
   const [tableCopied, setTableCopied] = useState(false);
+  // G8: Download all sessions .ics confirmation
+  const [icsDownloaded, setIcsDownloaded] = useState(false);
   const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false);
   const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const icsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewerTz = useViewerTz();
 
   const rows = parseAgenda(text, { sourceTimezone });
@@ -210,6 +272,15 @@ function CreatorView() {
   const unparsed = rows.filter((r): r is UnparsedLine => r.type === "unparsed");
   const sessionCount = sessions.length;
   const unparsedCount = unparsed.length;
+  // Line-accounting: count non-blank input lines to verify nothing silently disappears
+  const nonBlankInputLines = text.split("\n").filter((l) => l.trim() !== "").length;
+  // Lines that were promoted to dateheaders (visible in preview, not sessions)
+  const dateHeaderCount = rows.filter((r) => r.type === "dateheader").length;
+  const noteCount = rows.filter((r) => r.type === "note").length;
+  // Accounted = sessions + dateheaders + notes + unparsed (all visible)
+  const accountedCount = sessionCount + dateHeaderCount + noteCount + unparsedCount;
+  // If there's a gap it means some lines weren't accounted for (should not happen)
+  const unaccountedCount = Math.max(0, nonBlankInputLines - accountedCount);
 
   // H3: Copy share link — unmistakable confirmation
   const handleCopy = useCallback(() => {
@@ -289,6 +360,17 @@ function CreatorView() {
     }
   };
 
+  // G8: Download all sessions .ics
+  const handleDownloadAll = () => {
+    const icsContent = buildAllSessionsIcs(sessions);
+    if (!icsContent) return;
+    const filename = deriveIcsFilename(text);
+    downloadString(icsContent, filename, "text/calendar;charset=utf-8");
+    setIcsDownloaded(true);
+    if (icsTimerRef.current) clearTimeout(icsTimerRef.current);
+    icsTimerRef.current = setTimeout(() => setIcsDownloaded(false), 2000);
+  };
+
   // First 2 session cards for mobile preview
   const previewSessions = sessions.slice(0, 2);
 
@@ -325,6 +407,21 @@ function CreatorView() {
           >
             Your timezone:{" "}
             <span className="font-medium text-slate-700">{viewerTz}</span>
+          </div>
+          {/* G8: Download all sessions .ics — mobile above-fold */}
+          <div className="flex flex-col gap-1 mb-2">
+            <button
+              onClick={handleDownloadAll}
+              data-testid="download-all-ics-mobile"
+              aria-label="Download all sessions as .ics calendar file"
+              className="w-full rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2.5 transition-colors flex items-center justify-center gap-2"
+            >
+              <span>&#128197;</span>
+              <span>{icsDownloaded ? `Downloaded — ${sessions.length} session${sessions.length !== 1 ? "s" : ""} added` : "Download all sessions (.ics)"}</span>
+            </button>
+            <p role="status" className="text-xs text-sky-700 text-center">
+              Imports into Google Calendar, Apple Calendar &amp; Outlook
+            </p>
           </div>
           <div className="flex flex-col gap-2">
             {(mobilePreviewExpanded ? sessions : previewSessions).map((s, i) => (
@@ -497,6 +594,41 @@ function CreatorView() {
             <span className="font-medium text-slate-700">{viewerTz}</span>
           </div>
 
+          {/* G8: Download all sessions .ics — creator preview */}
+          {sessions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={handleDownloadAll}
+                data-testid="download-all-ics"
+                aria-label="Download all sessions as .ics calendar file"
+                className="w-full rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2.5 transition-colors flex items-center justify-center gap-2"
+              >
+                <span>&#128197;</span>
+                <span>{icsDownloaded ? `Downloaded — ${sessions.length} session${sessions.length !== 1 ? "s" : ""} added` : "Download all sessions (.ics)"}</span>
+              </button>
+              <p role="status" className="text-xs text-sky-700 text-center">
+                Imports into Google Calendar, Apple Calendar &amp; Outlook
+              </p>
+              {/* Honest line-accounting summary — prevents silent drop confusion */}
+              <p
+                data-testid="line-accounting-summary"
+                role="status"
+                className="text-xs text-slate-400 text-center"
+              >
+                {sessionCount} session{sessionCount !== 1 ? "s" : ""}
+                {unparsedCount > 0 && (
+                  <> &middot; <span className="text-amber-600">{unparsedCount} line{unparsedCount !== 1 ? "s" : ""} need a time</span></>
+                )}
+                {dateHeaderCount > 0 && (
+                  <> &middot; {dateHeaderCount} date header{dateHeaderCount !== 1 ? "s" : ""}</>
+                )}
+                {unaccountedCount > 0 && (
+                  <> &middot; <span className="text-red-600">{unaccountedCount} line{unaccountedCount !== 1 ? "s" : ""} unaccounted</span></>
+                )}
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             {text.trim() === "" ? (
               <div className="bg-white border border-dashed border-slate-300 rounded-lg p-6 text-center text-slate-400 text-sm">
@@ -512,11 +644,7 @@ function CreatorView() {
             ) : (
               rows.map((row, i) => {
                 if (row.type === "dateheader") {
-                  return (
-                    <p key={i} className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-1">
-                      {row.rawLine}
-                    </p>
-                  );
+                  return <DateHeaderRow key={i} rawLine={row.rawLine} />;
                 }
                 if (row.type === "note") {
                   return <NoteRow key={i} row={row} />;
@@ -561,11 +689,7 @@ function CreatorView() {
             ) : (
               rows.map((row, i) => {
                 if (row.type === "dateheader") {
-                  return (
-                    <p key={i} className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-1">
-                      {row.rawLine}
-                    </p>
-                  );
+                  return <DateHeaderRow key={i} rawLine={row.rawLine} />;
                 }
                 if (row.type === "note") {
                   return <NoteRow key={i} row={row} />;
@@ -604,6 +728,19 @@ function CreatorView() {
 function SharedView({ hash }: { hash: string }) {
   const state = decodeAgendaState(hash);
   const viewerTz = useViewerTz();
+  // G8: Download all confirmation state
+  const [icsDownloaded, setIcsDownloaded] = useState(false);
+  const icsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleDownloadAll = (sessions: ParsedSession[], agendaText: string) => {
+    const icsContent = buildAllSessionsIcs(sessions);
+    if (!icsContent) return;
+    const filename = deriveIcsFilename(agendaText);
+    downloadString(icsContent, filename, "text/calendar;charset=utf-8");
+    setIcsDownloaded(true);
+    if (icsTimerRef.current) clearTimeout(icsTimerRef.current);
+    icsTimerRef.current = setTimeout(() => setIcsDownloaded(false), 2000);
+  };
 
   if (!state) {
     return (
@@ -639,20 +776,40 @@ function SharedView({ hash }: { hash: string }) {
       <div
         role="status"
         aria-label="Detected viewer timezone"
-        className="text-sm text-slate-500 bg-slate-100 rounded px-3 py-1.5 mb-6 inline-block"
+        className="text-sm text-slate-500 bg-slate-100 rounded px-3 py-1.5 mb-4 inline-block"
       >
         Times shown in your timezone:{" "}
         <span className="font-medium text-slate-700">{viewerTz}</span>
       </div>
 
+      {/* G8: Download all sessions .ics — attendee view, full-width, above sessions */}
+      {sessions.length > 0 && (
+        <div className="flex flex-col gap-1 mb-6">
+          <button
+            onClick={() => handleDownloadAll(sessions, state.text)}
+            data-testid="download-all-ics"
+            aria-label="Download all sessions as .ics calendar file"
+            className="w-full rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-3 transition-colors flex items-center justify-center gap-2"
+          >
+            <span>&#128197;</span>
+            <span>{icsDownloaded ? `Downloaded — ${sessions.length} session${sessions.length !== 1 ? "s" : ""} added` : "Download all sessions (.ics)"}</span>
+          </button>
+          {icsDownloaded ? (
+            <p role="status" className="text-xs text-sky-700 text-center">
+              Imports into Google Calendar, Apple Calendar &amp; Outlook
+            </p>
+          ) : (
+            <p className="text-xs text-slate-400 text-center">
+              Imports into Google Calendar, Apple Calendar &amp; Outlook
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
         {rows.map((row, i) => {
           if (row.type === "dateheader") {
-            return (
-              <p key={i} className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2 pb-1">
-                {row.rawLine}
-              </p>
-            );
+            return <DateHeaderRow key={i} rawLine={row.rawLine} />;
           }
           if (row.type === "note") {
             return <NoteRow key={i} row={row} />;

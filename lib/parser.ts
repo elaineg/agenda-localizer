@@ -15,6 +15,16 @@ export interface ParsedSession {
   dateCross?: "+1 day" | "-1 day";
   /** If the per-line tz token was not recognized, this holds the unknown token string */
   unknownTzToken?: string;
+  /**
+   * True when no date could be resolved for this session (no date header, no inline date).
+   * The DTSTART day is the parser's reference date (today) — warn the user.
+   */
+  hasNoDate?: boolean;
+  /**
+   * The resolved source date string (YYYY-MM-DD) for this session, for per-card display.
+   * Undefined only when hasNoDate is true.
+   */
+  sourceDateStr?: string;
 }
 
 export interface UnparsedLine {
@@ -190,6 +200,22 @@ export function formatInZone(
 }
 
 /**
+ * Format a YYYY-MM-DD source date string as a short human label, e.g. "Tue, Jun 16".
+ * Returns empty string if the input is falsy or unparseable.
+ */
+export function formatSourceDate(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T00:00:00Z");
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(d);
+}
+
+/**
  * Get the calendar date (YYYY-MM-DD) of a UTC timestamp in a given IANA zone.
  */
 export function localDateString(utcDate: Date, ianaZone: string): string {
@@ -204,32 +230,74 @@ export function localDateString(utcDate: Date, ianaZone: string): string {
 
 // ── Date header detection ──────────────────────────────────────────────────
 
-const ISO_DATE_RE = /^\s*(\d{4}-\d{2}-\d{2})\s*$/;
-const NAMED_DATE_RE =
-  /^\s*(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+)?([A-Z][a-z]+ \d{1,2}(?:,? \d{4})?)\s*$/i;
+// Standalone ISO date line: "2026-06-16"
+const ISO_DATE_STANDALONE_RE = /^\s*(\d{4}-\d{2}-\d{2})\s*$/;
+// ISO date embedded anywhere in a line: "... 2026-06-22 ..."
+const ISO_DATE_EMBEDDED_RE = /\b(\d{4}-\d{2}-\d{2})\b/;
 
+// Full weekday + month + day (standalone header): "Tuesday, June 16" or "Mon June 23"
+// Abbreviated (Mon/Tue/…) OR full (Monday/Tuesday/…) optional weekday, then "Month DD[, YYYY]"
+const NAMED_DATE_STANDALONE_RE =
+  /^\s*(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\.?,?\s+)?([A-Z][a-z]+ \d{1,2}(?:,? \d{4})?)\s*$/i;
+
+// Abbreviated weekday + month + day embedded in a line (e.g. "Mon June 23" anywhere)
+// Full-weekday embedded (e.g. "Tuesday June 16")
+const NAMED_DATE_EMBEDDED_RE =
+  /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\.?,?\s+([A-Z][a-z]+ \d{1,2}(?:,? \d{4})?)/i;
+// Month + day only, embedded (e.g. "June 20")
+const MONTH_DAY_EMBEDDED_RE =
+  /\b(January|February|March|April|May|June|July|August|September|October|November|December) (\d{1,2})(?:,? (\d{4}))?\b/i;
+
+/** Parse a "Month DD[, YYYY]" string to YYYY-MM-DD. Returns null if invalid. */
+function parseMonthDay(monthDay: string, yearHint = 2026): string | null {
+  const d = new Date(monthDay + (monthDay.match(/\d{4}/) ? "" : `, ${yearHint}`));
+  if (isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Try to parse a standalone date header line (entire line is just a date).
+ * Returns YYYY-MM-DD or null.
+ */
 function tryParseDateHeader(line: string): string | null {
-  const isoMatch = ISO_DATE_RE.exec(line);
+  // Standalone ISO date
+  const isoMatch = ISO_DATE_STANDALONE_RE.exec(line);
   if (isoMatch) return isoMatch[1];
 
-  const namedMatch = NAMED_DATE_RE.exec(line);
+  // Standalone named date (full or abbreviated weekday + "Month DD[, YYYY]")
+  const namedMatch = NAMED_DATE_STANDALONE_RE.exec(line);
   if (namedMatch) {
-    const d = new Date(namedMatch[1] + ", 2026"); // default year
-    if (!isNaN(d.getTime())) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    }
-    // Try with year included
-    const d2 = new Date(namedMatch[1]);
-    if (!isNaN(d2.getTime())) {
-      const y = d2.getFullYear();
-      const m = String(d2.getMonth() + 1).padStart(2, "0");
-      const day = String(d2.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    }
+    return parseMonthDay(namedMatch[1]);
   }
+  return null;
+}
+
+/**
+ * Try to extract an inline date from a session line (line has BOTH a date and a time).
+ * Returns YYYY-MM-DD or null.
+ * Priority: ISO date > weekday+month+day > month+day.
+ */
+function tryExtractInlineDate(line: string): string | null {
+  // ISO date embedded: "Title — 2026-06-22 11:00 AM ET"
+  const isoEmbed = ISO_DATE_EMBEDDED_RE.exec(line);
+  if (isoEmbed) return isoEmbed[1];
+
+  // Weekday + month + day embedded: "Sprint Planning — Mon June 23, 9:00 AM PT"
+  const namedEmbed = NAMED_DATE_EMBEDDED_RE.exec(line);
+  if (namedEmbed) {
+    return parseMonthDay(namedEmbed[1]);
+  }
+
+  // Month + day only embedded: "Review — June 20, 9:00 AM PT"
+  const monthDayEmbed = MONTH_DAY_EMBEDDED_RE.exec(line);
+  if (monthDayEmbed) {
+    const [, month, day, year] = monthDayEmbed;
+    return parseMonthDay(`${month} ${day}${year ? `, ${year}` : ""}`);
+  }
+
   return null;
 }
 
@@ -552,7 +620,7 @@ const TRAILING_TZ_RE = new RegExp(
   "i"
 );
 
-/** Extract session title from a line after stripping the time tokens. */
+/** Extract session title from a line after stripping the time tokens and inline dates. */
 function extractTitle(line: string): string {
   // Remove bare-hour range first (H1: must be before BARE_HOUR_RE to avoid partial match)
   let cleaned = line.replace(BARE_HOUR_RANGE_RE, "");
@@ -576,10 +644,16 @@ function extractTitle(line: string): string {
   // Old code used /\s+[A-Z]{2,5}\s*$/ which ate trailing words like "SDK".
   // Now only strip if the trailing token is a known timezone abbreviation.
   cleaned = cleaned.replace(TRAILING_TZ_RE, "");
-  // Remove leading/trailing separators (em-dash, en-dash, hyphen, @, trailing colon)
+  // Strip inline ISO date (e.g. "2026-06-22" anywhere in line)
+  cleaned = cleaned.replace(ISO_DATE_EMBEDDED_RE, "");
+  // Strip inline weekday+month+day (e.g. "Mon June 23," or "Tuesday, June 16")
+  cleaned = cleaned.replace(NAMED_DATE_EMBEDDED_RE, "");
+  // Strip inline month+day (e.g. "June 20")
+  cleaned = cleaned.replace(MONTH_DAY_EMBEDDED_RE, "");
+  // Remove leading/trailing separators (em-dash, en-dash, hyphen, @, trailing colon, comma)
   // Trailing colon appears when line is "Title: 9:00 AM PT" — strip the trailing ":" after time removal
   // But do NOT strip internal colons (e.g. "Workshop: Building with AI")
-  cleaned = cleaned.replace(/^\s*[–—\-@:]+\s*/, "").replace(/\s*[–—\-@:]+\s*$/, "");
+  cleaned = cleaned.replace(/^\s*[–—\-@:,]+\s*/, "").replace(/\s*[–—\-@:,]+\s*$/, "");
   // Replace dash-type separators in body with a space (preserving internal colons)
   cleaned = cleaned.replace(/\s*[–—\-]+\s*/g, " ").trim();
   return cleaned || "Untitled session";
@@ -637,19 +711,32 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
           hint: "Couldn't read a time — try `16:00 UTC` or `4 PM ET`",
         });
       } else {
-        // Timeless line: render as a note/header, NOT an error
-        rows.push({ type: "note", rawLine: trimmed });
+        // Timeless line — but check if it contains an embedded date (a date header with context,
+        // like "Global Webinar Series — 2026-07-15"). If so, extract the date and use it.
+        const embeddedDate = tryExtractInlineDate(trimmed);
+        if (embeddedDate) {
+          // Treat as a date header line (updates currentDateStr for following sessions)
+          currentDateStr = embeddedDate;
+          rows.push({ type: "dateheader", rawLine: trimmed, date: embeddedDate });
+        } else {
+          // Pure timeless note/header, NOT an error
+          rows.push({ type: "note", rawLine: trimmed });
+        }
       }
       continue;
     }
 
-    // Resolve date
+    // Resolve date: priority = inline date on this line > currentDateStr > today (with hasNoDate flag)
+    const inlineDateStr = tryExtractInlineDate(trimmed);
+    const resolvedDateStr = inlineDateStr ?? currentDateStr ?? null;
+    const hasNoDate = !resolvedDateStr;
+
     let year = todayYear;
     let month = todayMonth;
     let day = todayDay;
 
-    if (currentDateStr) {
-      const parts = currentDateStr.split("-").map(Number);
+    if (resolvedDateStr) {
+      const parts = resolvedDateStr.split("-").map(Number);
       year = parts[0];
       month = parts[1];
       day = parts[2];
@@ -696,6 +783,9 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
       sourceTime: timeParse.sourceDisplay,
       rawLine: trimmed,
       dateCross, // will be computed per viewer in the component
+      ...(hasNoDate ? { hasNoDate: true } : {}),
+      // sourceDateStr is only set when a real date was resolved (not hasNoDate)
+      ...(!hasNoDate ? { sourceDateStr } : {}),
     };
 
     // Attach unknown tz token if present
@@ -703,7 +793,7 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
       session.unknownTzToken = timeParse.unknownTzToken;
     }
 
-    // Store source date for cross-day detection (as a hidden field)
+    // Also store on hidden field for computeDateCross backward compat
     (session as ParsedSession & { _sourceDateStr?: string })._sourceDateStr = sourceDateStr;
 
     rows.push(session);
@@ -731,20 +821,22 @@ export function computeDateCross(
 // ── Calendar helpers ───────────────────────────────────────────────────────
 
 function toIcsDate(d: Date): string {
-  return d
+  // Truncate to integer seconds to avoid fractional-second DTSTAMP (RFC 5545 §3.3.5)
+  const sec = new Date(Math.floor(d.getTime() / 1000) * 1000);
+  return sec
     .toISOString()
     .replace(/[-:]/g, "")
-    .replace(".000", "")
-    .replace("Z", "Z");
+    .replace(".000Z", "Z");
   // format: 20260616T160000Z
 }
 
 function toGCalDate(d: Date): string {
   // Google Calendar wants YYYYMMDDTHHmmssZ
-  return d
+  const sec = new Date(Math.floor(d.getTime() / 1000) * 1000);
+  return sec
     .toISOString()
     .replace(/[-:]/g, "")
-    .replace(".000", "");
+    .replace(".000Z", "Z");
 }
 
 export function buildGoogleCalendarUrl(session: ParsedSession): string {
@@ -758,10 +850,21 @@ export function buildGoogleCalendarUrl(session: ParsedSession): string {
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
+/** Escape special characters in ICS text properties per RFC 5545. */
+function escapeIcsText(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "");
+}
+
 export function buildIcsContent(session: ParsedSession): string {
   const endDate = session.endUtc ?? new Date(session.startUtc.getTime() + 60 * 60000);
   const uid = `${session.startUtc.getTime()}-${session.title.replace(/\s+/g, "-")}@agenda-localizer`;
   const now = toIcsDate(new Date());
+  const description = `Source time: ${session.sourceTime} — via Agenda Localizer`;
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -773,8 +876,48 @@ export function buildIcsContent(session: ParsedSession): string {
     `DTSTAMP:${now}`,
     `DTSTART:${toIcsDate(session.startUtc)}`,
     `DTEND:${toIcsDate(endDate)}`,
-    `SUMMARY:${session.title}`,
+    `SUMMARY:${escapeIcsText(session.title)}`,
+    `DESCRIPTION:${escapeIcsText(description)}`,
     "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+}
+
+/**
+ * Build a single multi-VEVENT .ics string containing every valid ParsedSession.
+ * Reuses the exact same per-session UTC start/end compute (toIcsDate on startUtc/endUtc)
+ * so combined times are byte-consistent with the per-session files.
+ * Unparsed/note/dateheader rows are excluded — pass only ParsedSession[].
+ * Returns null if sessions array is empty (caller should not download).
+ */
+export function buildAllSessionsIcs(sessions: ParsedSession[]): string | null {
+  if (sessions.length === 0) return null;
+  const now = toIcsDate(new Date());
+  const vevents: string[] = [];
+  for (const session of sessions) {
+    const endDate = session.endUtc ?? new Date(session.startUtc.getTime() + 60 * 60000);
+    // UID must be stable per session — use same derivation as buildIcsContent
+    const uid = `${session.startUtc.getTime()}-${session.title.replace(/\s+/g, "-")}@agenda-localizer`;
+    const description = `Source time: ${session.sourceTime} — via Agenda Localizer`;
+    const vevent = [
+      "BEGIN:VEVENT",
+      `UID:${uid}`,
+      `DTSTAMP:${now}`,
+      `DTSTART:${toIcsDate(session.startUtc)}`,
+      `DTEND:${toIcsDate(endDate)}`,
+      `SUMMARY:${escapeIcsText(session.title)}`,
+      `DESCRIPTION:${escapeIcsText(description)}`,
+      "END:VEVENT",
+    ].join("\r\n");
+    vevents.push(vevent);
+  }
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Agenda Localizer//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    ...vevents,
     "END:VCALENDAR",
   ].join("\r\n");
 }

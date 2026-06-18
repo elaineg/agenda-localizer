@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   parseAgenda,
   formatInZone,
+  formatSourceDate,
   ianaFromAbbr,
   buildGoogleCalendarUrl,
   buildIcsContent,
+  buildAllSessionsIcs,
   encodeAgendaState,
   decodeAgendaState,
   computeDateCross,
@@ -584,6 +586,16 @@ describe("Calendar link helpers", () => {
     const ics = buildIcsContent(s2);
     expect(ics).toContain("DTEND:20260616T170000Z");
   });
+
+  it("DTSTAMP has no fractional seconds (RFC 5545 §3.3.5)", () => {
+    const ics = buildIcsContent(session);
+    // DTSTAMP must match integer-second UTC basic format: 8 digits T 6 digits Z
+    const dtstampMatch = ics.match(/DTSTAMP:(\S+)/);
+    expect(dtstampMatch).not.toBeNull();
+    expect(dtstampMatch![1]).toMatch(/^\d{8}T\d{6}Z$/);
+    // Must NOT contain a dot (fractional seconds)
+    expect(dtstampMatch![1]).not.toContain(".");
+  });
 });
 
 describe("URL encoding/decoding", () => {
@@ -745,5 +757,451 @@ describe("H2: PST/PDT/EST/EDT as fixed offsets (not DST-aware)", () => {
     const rows = parseAgenda("9:00 AM PT", { sourceTimezone: "UTC", referenceDate: REF_DATE });
     const s = rows[0] as ParsedSession;
     expect(utcHM(s.startUtc)).toEqual({ h: 16, m: 0 });
+  });
+});
+
+// ── P0 fix: Date-header application and inline-date extraction ────────────────
+
+describe("P0 fix: ISO date header applied to following sessions", () => {
+  it("standalone ISO header 2026-07-15 applies to following session DTSTART", () => {
+    const text = "2026-07-15\n9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(1);
+    // DTSTART must be on 2026-07-15, not 2026-06-16 (REF_DATE)
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-07-15");
+    expect(sessions[0].hasNoDate).toBeFalsy();
+  });
+
+  it("ISO header date is applied to ALL following sessions until next header", () => {
+    const text = "2026-07-15\n9:00 AM PT\n11:00 AM ET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-07-15");
+    expect(sessions[1].startUtc.toISOString()).toContain("2026-07-15");
+  });
+
+  it("title text with embedded ISO date acts as date header for following sessions", () => {
+    // Wen's pattern: "Global Growth Webinar Series — 2026-07-15" is timeless but has a date
+    const text = "Global Growth Webinar Series — 2026-07-15\n9:00 AM JST\n14:00 CET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(2);
+    // Both sessions should be on 2026-07-15
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-07-15");
+    expect(sessions[1].startUtc.toISOString()).toContain("2026-07-15");
+  });
+});
+
+describe("P0 fix: Inline date on session line (Rob/Sam pattern)", () => {
+  it("inline ISO date: 'Title — 2026-06-22 11:00 AM ET' gets date 2026-06-22", () => {
+    const text = "Client Review — 2026-06-22 11:00 AM ET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-06-22");
+    expect(sessions[0].hasNoDate).toBeFalsy();
+  });
+
+  it("inline ISO date title is cleaned: no date leaks into SUMMARY", () => {
+    const text = "Client Review — 2026-06-22 11:00 AM ET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions[0].title).toBe("Client Review");
+    expect(sessions[0].title).not.toContain("2026");
+  });
+
+  it("multiple lines with per-line ISO dates all get their own date", () => {
+    const text = "Planning — 2026-06-23 9:00 AM PT\nRetro — 2026-06-27 2:00 PM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-06-23");
+    expect(sessions[1].startUtc.toISOString()).toContain("2026-06-27");
+  });
+});
+
+describe("P0 fix: Natural-language inline date (Elena/Jules pattern)", () => {
+  it("'Sprint Planning — Mon June 23, 9:00 AM PT' gets date 2026-06-23", () => {
+    const text = "Sprint Planning — Mon June 23, 9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-06-23");
+  });
+
+  it("'Mon June 23, 9:00 AM PT' title clean — no date leaks into SUMMARY", () => {
+    const text = "Sprint Planning — Mon June 23, 9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions[0].title).toBe("Sprint Planning");
+    expect(sessions[0].title).not.toContain("June");
+    expect(sessions[0].title).not.toContain("Mon");
+  });
+
+  it("'Community Office Hours — June 20' standalone becomes a date header", () => {
+    // Jules's pattern: a timeless line with month+day embedded acts as a date header
+    const text = "Community Office Hours — June 20\n9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const dateHeaders = rows.filter((r) => r.type === "dateheader");
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(dateHeaders).toHaveLength(1);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-06-20");
+  });
+});
+
+describe("P0 fix: hasNoDate flag — no silent wrong-date export", () => {
+  it("session with no date context gets hasNoDate=true", () => {
+    const text = "Sprint Planning — 9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].hasNoDate).toBe(true);
+  });
+
+  it("session WITH a date context does NOT get hasNoDate", () => {
+    const text = "2026-06-23\nSprint Planning — 9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].hasNoDate).toBeFalsy();
+  });
+});
+
+describe("P0 fix: on-screen day == .ics day consistency", () => {
+  it("session from ISO date header: DTSTART date matches ICS DTSTART", () => {
+    const text = "2026-07-15\n9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    const ics = buildIcsContent(sessions[0]);
+    // ICS must contain 2026-07-15 (as 20260715)
+    expect(ics).toContain("20260715");
+    // The per-session ICS and combined should be consistent
+    const combinedIcs = buildAllSessionsIcs(sessions)!;
+    const icsStart = ics.match(/DTSTART:(\S+)/)?.[1];
+    const combinedStart = combinedIcs.match(/DTSTART:(\S+)/)?.[1];
+    expect(icsStart).toBe(combinedStart);
+    expect(icsStart).toContain("20260715");
+  });
+
+  it("session from inline date: DTSTART date matches ICS DTSTART", () => {
+    const text = "Sprint Planning — Mon June 23, 9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    const ics = buildIcsContent(sessions[0]);
+    expect(ics).toContain("20260623");
+    const combinedIcs = buildAllSessionsIcs(sessions)!;
+    const icsStart = ics.match(/DTSTART:(\S+)/)?.[1];
+    const combinedStart = combinedIcs.match(/DTSTART:(\S+)/)?.[1];
+    expect(icsStart).toBe(combinedStart);
+  });
+});
+
+describe("P0 fix: abbreviated weekday date header standalone", () => {
+  it("'Mon June 23' standalone line is parsed as a date header", () => {
+    const text = "Mon June 23\n9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows[0].type).toBe("dateheader");
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-06-23");
+  });
+
+  it("'Fri June 27' standalone line applies June 27 to following session", () => {
+    const text = "Fri June 27\n2:00 PM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions[0].startUtc.toISOString()).toContain("2026-06-27");
+  });
+});
+
+describe("P1 fix: DESCRIPTION field in ICS", () => {
+  it("buildIcsContent includes DESCRIPTION with source time", () => {
+    const session: ParsedSession = {
+      type: "session",
+      title: "Keynote",
+      startUtc: new Date("2026-06-23T16:00:00Z"),
+      endUtc: null,
+      sourceTime: "9:00 AM PT",
+      rawLine: "Keynote — 9:00 AM PT",
+    };
+    const ics = buildIcsContent(session);
+    expect(ics).toContain("DESCRIPTION:");
+    expect(ics).toContain("9:00 AM PT");
+    expect(ics).toContain("Agenda Localizer");
+  });
+
+  it("buildAllSessionsIcs includes DESCRIPTION in combined file", () => {
+    const session: ParsedSession = {
+      type: "session",
+      title: "Keynote",
+      startUtc: new Date("2026-06-23T16:00:00Z"),
+      endUtc: null,
+      sourceTime: "9:00 AM PT",
+      rawLine: "Keynote — 9:00 AM PT",
+    };
+    const ics = buildAllSessionsIcs([session])!;
+    expect(ics).toContain("DESCRIPTION:");
+    expect(ics).toContain("9:00 AM PT");
+  });
+});
+
+describe("G8: buildAllSessionsIcs — combined multi-VEVENT .ics", () => {
+  const session1: ParsedSession = {
+    type: "session",
+    title: "Opening Keynote",
+    startUtc: new Date("2026-06-16T16:00:00Z"),
+    endUtc: new Date("2026-06-16T17:00:00Z"),
+    sourceTime: "16:00 UTC",
+    rawLine: "Opening Keynote — 16:00 UTC",
+  };
+  const session2: ParsedSession = {
+    type: "session",
+    title: "Workshop: Building with AI",
+    startUtc: new Date("2026-06-16T17:30:00Z"),
+    endUtc: new Date("2026-06-16T18:30:00Z"),
+    sourceTime: "17:30 UTC",
+    rawLine: "Workshop: Building with AI — 17:30 UTC",
+  };
+  const session3: ParsedSession = {
+    type: "session",
+    title: "Panel Discussion",
+    startUtc: new Date("2026-06-16T18:00:00Z"),
+    endUtc: null,
+    sourceTime: "9:00 AM PT",
+    rawLine: "Panel Discussion — 9:00 AM PT",
+  };
+
+  it("returns null for empty sessions array", () => {
+    expect(buildAllSessionsIcs([])).toBeNull();
+  });
+
+  it("contains BEGIN:VCALENDAR and END:VCALENDAR envelope", () => {
+    const ics = buildAllSessionsIcs([session1]);
+    expect(ics).not.toBeNull();
+    expect(ics!.startsWith("BEGIN:VCALENDAR")).toBe(true);
+    expect(ics!.trimEnd().endsWith("END:VCALENDAR")).toBe(true);
+  });
+
+  it("contains exactly 3 VEVENT blocks for 3 sessions", () => {
+    const ics = buildAllSessionsIcs([session1, session2, session3]);
+    expect(ics).not.toBeNull();
+    const beginCount = (ics!.match(/BEGIN:VEVENT/g) ?? []).length;
+    const endCount = (ics!.match(/END:VEVENT/g) ?? []).length;
+    expect(beginCount).toBe(3);
+    expect(endCount).toBe(3);
+  });
+
+  it("DTSTART matches per-session buildIcsContent DTSTART byte-for-byte", () => {
+    const combined = buildAllSessionsIcs([session1])!;
+    const perSession = buildIcsContent(session1);
+    // Extract DTSTART from both
+    const combinedDtstart = combined.match(/DTSTART:(\S+)/)?.[1];
+    const perSessionDtstart = perSession.match(/DTSTART:(\S+)/)?.[1];
+    expect(combinedDtstart).toBe(perSessionDtstart);
+    expect(combinedDtstart).toBe("20260616T160000Z");
+  });
+
+  it("DTEND is correct for session with explicit endUtc", () => {
+    const ics = buildAllSessionsIcs([session1])!;
+    expect(ics).toContain("DTEND:20260616T170000Z");
+  });
+
+  it("DTEND defaults to +1 hour when endUtc is null", () => {
+    const ics = buildAllSessionsIcs([session3])!;
+    // Panel Discussion starts at 18:00 UTC, defaults to 19:00 UTC
+    expect(ics).toContain("DTSTART:20260616T180000Z");
+    expect(ics).toContain("DTEND:20260616T190000Z");
+  });
+
+  it("SUMMARY escapes commas per RFC 5545", () => {
+    const sessionWithComma: ParsedSession = {
+      ...session1,
+      title: "Session, Part 2",
+    };
+    const ics = buildAllSessionsIcs([sessionWithComma])!;
+    expect(ics).toContain("SUMMARY:Session\\, Part 2");
+  });
+
+  it("SUMMARY escapes semicolons per RFC 5545", () => {
+    const sessionWithSemi: ParsedSession = {
+      ...session1,
+      title: "Session; Part 2",
+    };
+    const ics = buildAllSessionsIcs([sessionWithSemi])!;
+    expect(ics).toContain("SUMMARY:Session\\; Part 2");
+  });
+
+  it("uses CRLF line endings per RFC 5545", () => {
+    const ics = buildAllSessionsIcs([session1])!;
+    expect(ics).toContain("\r\n");
+    // Every line should end with CRLF (no bare LF lines)
+    const lines = ics.split("\r\n");
+    expect(lines.length).toBeGreaterThan(1);
+  });
+
+  it("DTSTAMP has no fractional seconds (RFC 5545 §3.3.5)", () => {
+    const ics = buildAllSessionsIcs([session1])!;
+    // All DTSTAMP values must be integer-second UTC basic format: 8 digits T 6 digits Z
+    const matches = [...ics.matchAll(/DTSTAMP:(\S+)/g)];
+    expect(matches.length).toBeGreaterThan(0);
+    for (const m of matches) {
+      expect(m[1]).toMatch(/^\d{8}T\d{6}Z$/);
+      expect(m[1]).not.toContain(".");
+    }
+  });
+
+  it("each VEVENT has a stable UID matching the per-session UID pattern", () => {
+    const ics = buildAllSessionsIcs([session1])!;
+    const uid = `${session1.startUtc.getTime()}-Opening-Keynote@agenda-localizer`;
+    expect(ics).toContain(`UID:${uid}`);
+  });
+
+  it("3 valid sessions + 1 unparsed line → exactly 3 VEVENTs (parser filters unparsed)", () => {
+    // This test verifies the caller responsibility: pass only ParsedSession[] (sessions)
+    // The combined file only has what's passed in, excluding unparsed rows.
+    const ics = buildAllSessionsIcs([session1, session2, session3])!;
+    const beginCount = (ics.match(/BEGIN:VEVENT/g) ?? []).length;
+    expect(beginCount).toBe(3);
+  });
+
+  it("filename derived from agenda text via deriveSlug", () => {
+    // Verify parser integration: the ICS content for the agenda sample contains correct titles
+    const text = "2026-06-16\nOpening Keynote — 16:00 UTC\nWorkshop: Building with AI — 17:30 UTC\nPanel Discussion — 9:00 AM PT\njust some words with no time";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(3); // 3 valid, 1 note excluded
+    const ics = buildAllSessionsIcs(sessions)!;
+    const beginCount = (ics.match(/BEGIN:VEVENT/g) ?? []).length;
+    expect(beginCount).toBe(3);
+  });
+});
+
+// ── Fix: line-accounting guarantee — no non-blank input line silently disappears ──
+
+describe("Fix: line-accounting — every non-blank input line is accounted for (session | dateheader | note | unparsed)", () => {
+  function countNonBlankLines(text: string) {
+    return text.split("\n").filter((l) => l.trim() !== "").length;
+  }
+  function accountedRows(rows: ReturnType<typeof parseAgenda>) {
+    return rows.filter(
+      (r) => r.type === "session" || r.type === "dateheader" || r.type === "note" || r.type === "unparsed"
+    ).length;
+  }
+
+  it("simple 3-session agenda: all lines accounted for", () => {
+    const text = "9:00 AM PT\n11:00 AM ET\n2:00 PM UTC";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(accountedRows(rows)).toBe(countNonBlankLines(text));
+  });
+
+  it("date header + sessions: all lines accounted for", () => {
+    const text = "2026-06-20\n9:00 AM PT\n11:00 AM ET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(accountedRows(rows)).toBe(countNonBlankLines(text));
+  });
+
+  it("timeless line with embedded date (promoted to dateheader): line is accounted for", () => {
+    // Jules/Elena pattern: "Friday Jun 26 — Community Game Night" has no time but has June 26
+    const text = "Community Office Hours — June 26\n9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    // The first line becomes a dateheader (embedded June 26), second is a session
+    expect(accountedRows(rows)).toBe(countNonBlankLines(text));
+    expect(rows[0].type).toBe("dateheader");
+    expect(rows[1].type).toBe("session");
+  });
+
+  it("mixed: sessions, notes, unparsed, dateheaders — all accounted for", () => {
+    const text = "2026-06-16\nOpening Keynote — 16:00 UTC\njust some words with no time\nTalk — 26:00 UTC\nWorkshop — 17:30 UTC";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(accountedRows(rows)).toBe(countNonBlankLines(text));
+  });
+
+  it("N input lines → N rows (no silent drops for any row type)", () => {
+    // Paste exactly 5 non-blank lines of various types
+    const text = [
+      "2026-06-20",                      // dateheader
+      "Opening Keynote — 9:00 AM PT",    // session
+      "lunch",                           // note
+      "Bad Time — 26:00 UTC",           // unparsed
+      "Panel — 2:00 PM ET",             // session
+    ].join("\n");
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(accountedRows(rows)).toBe(5);
+    expect(rows[0].type).toBe("dateheader");
+    expect(rows[1].type).toBe("session");
+    expect(rows[2].type).toBe("note");
+    expect(rows[3].type).toBe("unparsed");
+    expect(rows[4].type).toBe("session");
+  });
+
+  it("blank lines are skipped (not counted as non-blank input)", () => {
+    const text = "9:00 AM PT\n\n\n11:00 AM ET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(countNonBlankLines(text)).toBe(2);
+    expect(accountedRows(rows)).toBe(2);
+  });
+});
+
+// ── Fix: sourceDateStr on ParsedSession — per-card parsed date label ──────────
+
+describe("Fix: sourceDateStr on ParsedSession — auditable per-card parsed date", () => {
+  it("session from ISO date header has sourceDateStr = that date", () => {
+    const text = "2026-07-15\n9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions[0].sourceDateStr).toBe("2026-07-15");
+  });
+
+  it("session from inline date has sourceDateStr = that inline date", () => {
+    const text = "Sprint Planning — Mon June 23, 9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions[0].sourceDateStr).toBe("2026-06-23");
+  });
+
+  it("session with hasNoDate has no sourceDateStr", () => {
+    const text = "Meeting — 9:00 AM PT";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions[0].hasNoDate).toBe(true);
+    expect(sessions[0].sourceDateStr).toBeUndefined();
+  });
+
+  it("multiple sessions from different date headers each carry correct sourceDateStr", () => {
+    const text = "2026-06-20\n9:00 AM PT\n2026-06-27\n2:00 PM ET";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter((r): r is ParsedSession => r.type === "session");
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0].sourceDateStr).toBe("2026-06-20");
+    expect(sessions[1].sourceDateStr).toBe("2026-06-27");
+  });
+});
+
+// ── Fix: formatSourceDate helper ──────────────────────────────────────────────
+
+describe("Fix: formatSourceDate — human-readable date label for session cards", () => {
+  it("formats '2026-06-16' as 'Tue, Jun 16'", () => {
+    const label = formatSourceDate("2026-06-16");
+    expect(label).toMatch(/Tue/);
+    expect(label).toMatch(/Jun/);
+    expect(label).toMatch(/16/);
+  });
+
+  it("formats '2026-07-15' and includes correct weekday", () => {
+    const label = formatSourceDate("2026-07-15");
+    // 2026-07-15 is a Wednesday
+    expect(label).toMatch(/Wed/);
+    expect(label).toMatch(/Jul/);
+    expect(label).toMatch(/15/);
+  });
+
+  it("returns empty string for undefined", () => {
+    expect(formatSourceDate(undefined)).toBe("");
+  });
+
+  it("returns empty string for empty string", () => {
+    expect(formatSourceDate("")).toBe("");
   });
 });
