@@ -503,10 +503,11 @@ function tryParseTime(
     // Validate: 12-hour hour must be 1–12
     if (!isValidHourMinute(hour, minute, true)) return null;
     const ampm = h12Match[3].toUpperCase() as "AM" | "PM";
-    const tzMatch = TZ_ABBR_RE.exec(line);
-    const rawTzToken = extractRawTzToken(line, h12Match[0]);
-    const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
-    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
+    // TOKEN-COLLISION FIX: only look for tz token ADJACENT to the time match
+    const adjacentTz = extractAdjacentTzToken(line, h12Match[0], h12Match.index);
+    const rawTzToken = adjacentTz ? undefined : extractRawTzToken(line, h12Match[0]);
+    const tzAbbr = (adjacentTz ? adjacentTz.abbr : defaultTzAbbr).toUpperCase();
+    const unknownTzToken = !adjacentTz && rawTzToken ? rawTzToken : undefined;
     const sh = applyAmPm({ hour, minute, ampm });
     const sourceDisplay = `${h12Match[1]}:${h12Match[2]} ${ampm} ${tzAbbr}`;
     return {
@@ -514,7 +515,7 @@ function tryParseTime(
       startMinute: minute,
       endHour: null,
       endMinute: null,
-      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
+      tzAbbr: adjacentTz ? tzAbbr : defaultTzAbbr,
       sourceDisplay,
       unknownTzToken,
     };
@@ -527,18 +528,19 @@ function tryParseTime(
     if (!isValidHourMinute(hour, 0, true)) return null;
     const rawAmPm = bareMatch[2].toLowerCase().replace(/\./g, "");
     const ampm: "AM" | "PM" = rawAmPm.startsWith("p") ? "PM" : "AM";
-    const tzMatch = TZ_ABBR_RE.exec(line);
-    const rawTzToken = extractRawTzToken(line, bareMatch[0]);
-    const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
-    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
+    // TOKEN-COLLISION FIX: only look for tz token ADJACENT to the time match
+    const adjacentTz = extractAdjacentTzToken(line, bareMatch[0], bareMatch.index);
+    const rawTzToken = adjacentTz ? undefined : extractRawTzToken(line, bareMatch[0]);
+    const tzAbbr = (adjacentTz ? adjacentTz.abbr : defaultTzAbbr).toUpperCase();
+    const unknownTzToken = !adjacentTz && rawTzToken ? rawTzToken : undefined;
     const sh = applyAmPm({ hour, minute: 0, ampm });
-    const sourceDisplay = `${hour}:00 ${ampm} ${tzMatch ? tzAbbr : defaultTzAbbr}`;
+    const sourceDisplay = `${hour}:00 ${ampm} ${adjacentTz ? tzAbbr : defaultTzAbbr}`;
     return {
       startHour: sh,
       startMinute: 0,
       endHour: null,
       endMinute: null,
-      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
+      tzAbbr: adjacentTz ? tzAbbr : defaultTzAbbr,
       sourceDisplay,
       unknownTzToken,
     };
@@ -549,17 +551,18 @@ function tryParseTime(
   if (wordMatch) {
     const word = wordMatch[1].toLowerCase();
     const hour = word === "noon" ? 12 : 0;
-    const tzMatch = TZ_ABBR_RE.exec(line);
-    const rawTzToken = extractRawTzToken(line, wordMatch[0]);
-    const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
-    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
-    const sourceDisplay = `${word} ${tzMatch ? tzAbbr : defaultTzAbbr}`;
+    // TOKEN-COLLISION FIX: only look for tz token ADJACENT to the time match
+    const adjacentTz = extractAdjacentTzToken(line, wordMatch[0], wordMatch.index);
+    const rawTzToken = adjacentTz ? undefined : extractRawTzToken(line, wordMatch[0]);
+    const tzAbbr = (adjacentTz ? adjacentTz.abbr : defaultTzAbbr).toUpperCase();
+    const unknownTzToken = !adjacentTz && rawTzToken ? rawTzToken : undefined;
+    const sourceDisplay = `${word} ${adjacentTz ? tzAbbr : defaultTzAbbr}`;
     return {
       startHour: hour,
       startMinute: 0,
       endHour: null,
       endMinute: null,
-      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
+      tzAbbr: adjacentTz ? tzAbbr : defaultTzAbbr,
       sourceDisplay,
       unknownTzToken,
     };
@@ -572,23 +575,48 @@ function tryParseTime(
     const minute = parseInt(h24Match[2], 10);
     // Validate: 24-hour hour must be 0–23, minute 0–59
     if (!isValidHourMinute(hour, minute, false)) return null;
-    const tzMatch = TZ_ABBR_RE.exec(line);
-    const rawTzToken = extractRawTzToken(line, h24Match[0]);
-    const tzAbbr = (tzMatch ? tzMatch[1] : defaultTzAbbr).toUpperCase();
-    const unknownTzToken = !tzMatch && rawTzToken ? rawTzToken : undefined;
-    const sourceDisplay = `${h24Match[1]}:${h24Match[2]} ${tzMatch ? tzAbbr : defaultTzAbbr}`;
+    // TOKEN-COLLISION FIX: only look for tz token ADJACENT to the time match
+    const adjacentTz = extractAdjacentTzToken(line, h24Match[0], h24Match.index);
+    const rawTzToken = adjacentTz ? undefined : extractRawTzToken(line, h24Match[0]);
+    const tzAbbr = (adjacentTz ? adjacentTz.abbr : defaultTzAbbr).toUpperCase();
+    const unknownTzToken = !adjacentTz && rawTzToken ? rawTzToken : undefined;
+    const sourceDisplay = `${h24Match[1]}:${h24Match[2]} ${adjacentTz ? tzAbbr : defaultTzAbbr}`;
     return {
       startHour: hour,
       startMinute: minute,
       endHour: null,
       endMinute: null,
-      tzAbbr: tzMatch ? tzAbbr : defaultTzAbbr,
+      tzAbbr: adjacentTz ? tzAbbr : defaultTzAbbr,
       sourceDisplay,
       unknownTzToken,
     };
   }
 
   return null;
+}
+
+/**
+ * TOKEN-COLLISION FIX: Extract a tz token that is ADJACENT TO (immediately after) a time match.
+ * This ensures "PT" in "PT Roadmap — 2:00 PM" is NOT counted as the tz token for the time,
+ * while "PT" in "2:00 PM PT" IS counted.
+ *
+ * Returns { abbr, iana } if a recognized tz token immediately follows the time match, else null.
+ * "Immediately follows" = the first non-whitespace word after the matched time string.
+ */
+function extractAdjacentTzToken(
+  line: string,
+  timeMatchStr: string,
+  timeMatchIndex: number
+): { abbr: string; iana: string } | null {
+  const afterIdx = timeMatchIndex + timeMatchStr.length;
+  const after = line.slice(afterIdx);
+  // The adjacent tz must be the very next word (possibly after whitespace)
+  const m = /^\s*([A-Za-z]{2,6})\b/.exec(after);
+  if (!m) return null;
+  const token = m[1].toUpperCase();
+  const iana = ianaFromAbbr(token);
+  if (!iana) return null;
+  return { abbr: token, iana };
 }
 
 /**
@@ -601,49 +629,141 @@ function extractRawTzToken(line: string, matchedTimeStr: string): string | null 
   const idx = line.indexOf(matchedTimeStr);
   if (idx < 0) return null;
   const after = line.slice(idx + matchedTimeStr.length).trim();
-  // Check for a 2-5 letter word that looks like a tz abbr at start of remainder
-  const m = /^([A-Z]{2,5})\b/i.exec(after);
+  // TRUST FIX #1: Only flag tokens that are ALL-UPPERCASE in the source text.
+  // Real timezone abbreviations (PT, EST, CET, etc.) are always all-caps.
+  // Title-cased words like "Early", "Birds", "Session" are not tz tokens — never warn on them.
+  // The regex now requires all-uppercase (no lowercase letters) in the 2-5 char token.
+  const m = /^([A-Z]{2,5})\b/.exec(after);
   if (!m) return null;
-  const token = m[1].toUpperCase();
+  const token = m[1]; // Already all-uppercase (regex requires it)
   // Only flag if it's NOT a recognized tz abbr
   if (ianaFromAbbr(token)) return null;
-  // Don't flag common English words
+  // Don't flag common English abbreviations that happen to be all-caps
   const COMMON_WORDS = new Set(["AM", "PM", "THE", "AND", "FOR", "WITH", "OPEN", "CALL", "TALK"]);
   if (COMMON_WORDS.has(token)) return null;
   return token;
 }
 
-// (RECOGNIZED_TZ_ABBRS_SET is derived from ALL_TZ_ABBRS for the TRAILING_TZ_RE)
+// (RECOGNIZED_TZ_ABBRS_SET is derived from ALL_TZ_ABBRS for the TRAILING_TZ_RE / LEADING_TZ_RE)
 // Regex that matches only recognized TZ abbreviations at end of string (for title cleanup)
 const TRAILING_TZ_RE = new RegExp(
   `\\s+(${ALL_TZ_ABBRS})\\s*$`,
   "i"
 );
+// Regex that matches only recognized TZ abbreviations at START of string followed by whitespace/separator
+// Used to strip "PT" from "PT — Keynote" when the time was at the beginning of the line
+const LEADING_TZ_RE = new RegExp(
+  `^(${ALL_TZ_ABBRS})\\s*([–—\\-@:,\\s]|$)`,
+  "i"
+);
 
-/** Extract session title from a line after stripping the time tokens and inline dates. */
+/**
+ * Extract session title from a line after stripping the time tokens and inline dates.
+ *
+ * TOKEN-COLLISION FIX: A tz abbreviation token (PT, ET, AM, CET, etc.) is ONLY stripped
+ * when it is adjacent to/immediately following a parsed time token — never when it appears
+ * as a standalone word in the title position.
+ *
+ * Examples:
+ *   "PT Roadmap — Q3 — 2:00 PM PT" → "PT Roadmap — Q3" (first PT is title, trailing PT+time are stripped)
+ *   "AM Keynote — 9:00 AM PT"       → "AM Keynote"      (AM in title kept; only the time AM+PT stripped)
+ *   "ET Office Hours — 14:00 ET"    → "ET Office Hours" (leading ET is title word, not tz)
+ *   "10:00 AM PT Opening Keynote"   → "Opening Keynote" (PT consumed adjacent to time, stripped)
+ *
+ * Strategy: strip time tokens first (which include their adjacent tz when part of the time regex),
+ * then only strip a TRAILING tz token (one at the very end of the remaining string) — never
+ * replace all occurrences of tz tokens globally.
+ *
+ * ADJACENT-TZ STRIP (DEFECT #2 FIX): When a time token is removed, also strip any immediately-
+ * following recognized tz token that was consumed as the inline source tz. This prevents
+ * "10:00 AM PT Opening Keynote" → "PT Opening Keynote" (the glued tz-on-title bug).
+ * But "PT Roadmap — 2:00 PM PT" must NOT strip the leading PT — only the adjacent one.
+ */
+
+// Regex that strips a time token PLUS its immediately adjacent tz (time + optional whitespace + tz abbr)
+// Used for 12h, bare-hour, and 24h single-time cases to strip the consumed tz in one pass.
+const TIME_12H_WITH_ADJACENT_TZ_RE = new RegExp(
+  `\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM)\\s+(${ALL_TZ_ABBRS})\\b`,
+  "i"
+);
+const BARE_HOUR_WITH_ADJACENT_TZ_RE = new RegExp(
+  `\\b\\d{1,2}\\s*(?:[ap]\\.?m\\.?)\\s+(${ALL_TZ_ABBRS})\\b`,
+  "i"
+);
+const TIME_24H_WITH_ADJACENT_TZ_RE = new RegExp(
+  `\\b\\d{1,2}:\\d{2}\\s+(${ALL_TZ_ABBRS})\\b(?!\\s*(?:AM|PM))`,
+  "i"
+);
+const WORD_TIME_WITH_ADJACENT_TZ_RE = new RegExp(
+  `\\b(?:noon|midnight)\\s+(${ALL_TZ_ABBRS})\\b`,
+  "i"
+);
+
 function extractTitle(line: string): string {
+  // The TIME_RANGE_RE and BARE_HOUR_RANGE_RE already include the trailing tz in their capture,
+  // so removing those removes the tz too.
   // Remove bare-hour range first (H1: must be before BARE_HOUR_RE to avoid partial match)
   let cleaned = line.replace(BARE_HOUR_RANGE_RE, "");
-  // Remove time range expression
+  // Remove time range expression (includes trailing tz token in the regex)
   cleaned = cleaned.replace(TIME_RANGE_RE, "");
-  // Remove 12h time
+  // Remove 12h time + adjacent tz (e.g. "10:00 AM PT") in one pass to avoid tz gluing onto title
+  // Must be before TIME_12H_RE to catch the tz too.
+  cleaned = cleaned.replace(TIME_12H_WITH_ADJACENT_TZ_RE, "");
+  // Remove any remaining 12h time without adjacent tz
   cleaned = cleaned.replace(TIME_12H_RE, "");
+  // Remove bare-hour time + adjacent tz (e.g. "8pm PT") in one pass
+  cleaned = cleaned.replace(BARE_HOUR_WITH_ADJACENT_TZ_RE, "");
   // Remove bare-hour time (e.g. "8pm", "7 PM") — only the time token itself
-  // H1 FIX: BARE_HOUR_RE previously ate the preceding word; stripping the match
-  // directly removes only the matched token (e.g. "11:30am" not "SDK 11:30am")
   cleaned = cleaned.replace(BARE_HOUR_RE, "");
+  // Remove word times + adjacent tz (e.g. "noon PT")
+  cleaned = cleaned.replace(WORD_TIME_WITH_ADJACENT_TZ_RE, "");
   // Remove word times (noon, midnight)
   cleaned = cleaned.replace(WORD_TIME_RE, "");
+  // Remove 24h time + adjacent tz (e.g. "16:00 PT")
+  cleaned = cleaned.replace(TIME_24H_WITH_ADJACENT_TZ_RE, "");
   // Remove 24h time
   cleaned = cleaned.replace(TIME_24H_RE, "");
-  // Remove known tz abbreviation (only recognized abbrs, not arbitrary uppercase words)
-  cleaned = cleaned.replace(TZ_ABBR_RE, "");
-  // Strip out-of-scope trailing dual-tz remainder: "/ HH:MM ABBR" or "/ HH ABBR" patterns
-  cleaned = cleaned.replace(/\s*\/\s*\d{1,2}(?::\d{2})?\s*[A-Z]{2,5}\b.*$/i, "");
-  // H1 FIX: Remove ONLY recognized tz abbreviation tokens at the end, not arbitrary words.
-  // Old code used /\s+[A-Z]{2,5}\s*$/ which ate trailing words like "SDK".
-  // Now only strip if the trailing token is a known timezone abbreviation.
-  cleaned = cleaned.replace(TRAILING_TZ_RE, "");
+  // TOKEN-COLLISION FIX: Do NOT do a global replace of TZ_ABBR_RE here.
+  // Strip tz tokens ONLY at the leading or trailing boundary of the string after time removal.
+  // This preserves "PT" in "PT Roadmap", "AM" in "AM Keynote", "ET" in "ET Office Hours"
+  // when those words appear in the middle of a title phrase.
+  //
+  // Cases handled:
+  // - "PT — Keynote" (after removing "9:00 AM"): leading PT → strip → "— Keynote" → "Keynote"
+  // - "Kickoff SGT" (after removing "9:00"): trailing SGT → strip → "Kickoff"
+  // - "PT Roadmap — Q3" (after removing "2:00 PM PT"): no leading/trailing tz → preserved
+  //
+  // Strip out-of-scope trailing dual-tz remainder: "/ HH:MM ABBR", "/ HH ABBR", or "/ ABBR" patterns
+  // Also handles case where tz was already stripped by adjacent-tz removal above ("/ 17:00" without tz,
+  // or "/ BST" where the time was already removed). Use a more general pattern: slash + optional time + optional tz.
+  cleaned = cleaned.replace(/\s*\/\s*(?:\d{1,2}(?::\d{2})?\s*)?[A-Z]{2,5}\b.*$/i, "");
+  // Also strip bare "/ " remnant if no tz/time followed (e.g. "/" with whitespace on both sides)
+  cleaned = cleaned.replace(/\s*\/\s*$/, "");
+  // Remove ONLY trailing tz abbreviation — but only when the remaining cleaned string
+  // would still have non-tz content (i.e., not stripping the entire remaining text).
+  // This handles "Kickoff 9:00 SGT" → time removed → "Kickoff SGT" → strip trailing "SGT".
+  const withoutTrailingTz = cleaned.replace(TRAILING_TZ_RE, "");
+  // Only apply if we didn't strip the entire remaining content
+  if (withoutTrailingTz.trim()) {
+    cleaned = withoutTrailingTz;
+  }
+  // Remove ONLY leading tz abbreviation — but only when the tz is followed by a separator,
+  // meaning it was stranded after a time-at-start-of-line was removed.
+  // "PT — Keynote" → leading PT followed by separator → strip → "— Keynote"
+  // "PT Roadmap" → PT followed by a word (no separator) → DO NOT strip (it's a title word)
+  const leadingMatch = LEADING_TZ_RE.exec(cleaned.trim());
+  if (leadingMatch) {
+    const afterMatch = cleaned.trim().slice(leadingMatch[0].length - (leadingMatch[2]?.length ?? 0));
+    // The second capture group is the separator — if it's whitespace or separator, strip
+    if (leadingMatch[2] && /^[–—\-@:,\s]/.test(leadingMatch[2])) {
+      // Only strip if what remains is non-empty and starts with a separator (not a title word)
+      const remainder = cleaned.trim().slice(leadingMatch[1].length).trim();
+      if (remainder && /^[–—\-@:,]/.test(remainder)) {
+        cleaned = remainder;
+      }
+    }
+    void afterMatch; // suppress unused warning
+  }
   // Strip inline ISO date (e.g. "2026-06-22" anywhere in line)
   cleaned = cleaned.replace(ISO_DATE_EMBEDDED_RE, "");
   // Strip inline weekday+month+day (e.g. "Mon June 23," or "Tuesday, June 16")
@@ -653,10 +773,146 @@ function extractTitle(line: string): string {
   // Remove leading/trailing separators (em-dash, en-dash, hyphen, @, trailing colon, comma)
   // Trailing colon appears when line is "Title: 9:00 AM PT" — strip the trailing ":" after time removal
   // But do NOT strip internal colons (e.g. "Workshop: Building with AI")
-  cleaned = cleaned.replace(/^\s*[–—\-@:,]+\s*/, "").replace(/\s*[–—\-@:,]+\s*$/, "");
-  // Replace dash-type separators in body with a space (preserving internal colons)
-  cleaned = cleaned.replace(/\s*[–—\-]+\s*/g, " ").trim();
+  // Apply iteratively until stable to handle multi-layer removal (e.g. "Sprint Planning — ," → "Sprint Planning")
+  let prev = "";
+  while (cleaned !== prev) {
+    prev = cleaned;
+    cleaned = cleaned.replace(/^\s*[–—\-@:,]+\s*/, "").replace(/\s*[–—\-@:,]+\s*$/, "");
+    cleaned = cleaned.trim();
+  }
+  // TOKEN-COLLISION FIX: Do NOT replace interior dashes globally — they may be part of the title.
+  // "PT Roadmap — Q3" should keep the em-dash; "Session 3" from "Session 3 — 16:00 UTC" is
+  // already correct because the "—" was between title and time which was already removed.
+  // Only normalize multiple consecutive whitespace into a single space.
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
   return cleaned || "Untitled session";
+}
+
+// ── Stated-once timezone header detection ────────────────────────────────────
+//
+// Detects lines like "All times PT", "all times in ET", "times are CET", "Times: PST"
+// Also matches embedded/parenthetical forms:
+//   "(all times PT)", "(times in PT)", "Times: PT", "Summit 2026 — All times PT"
+//   "All session times are in PT", "times are in Pacific", "... PT" on intro line
+// These lines are consumed as configuration (they set the source tz)
+// and are NOT rendered as sessions or notes.
+//
+// Precedence (data-integrity, non-negotiable):
+//   1. Explicit inline per-session tz (e.g. "2pm PT") — authoritative for THAT session
+//   2. Stated-once header line (e.g. "All times PT") — fallback for sessions lacking inline tz
+//   3. Manual source-tz selector — fallback of last resort
+//   Inference NEVER overrides an explicit inline value.
+
+// Strict standalone form: the WHOLE line is a tz declaration
+const STATED_ONCE_STANDALONE_RE = new RegExp(
+  `^(?:all\\s+times?\\s*(?:in\\s+|are\\s+(?:in\\s+)?|:\\s*)?|times?\\s*(?:are\\s+(?:in\\s+)?|in\\s+|:\\s*)?|all\\s+session\\s+times?\\s*(?:in\\s+|are\\s+(?:in\\s+)?|:\\s*)?)(${ALL_TZ_ABBRS}|Pacific|Eastern|Central|Mountain)\\s*$`,
+  "i"
+);
+
+// Timezone word map: "Pacific" → "PT", etc.
+const TZ_WORD_MAP: Record<string, string> = {
+  PACIFIC: "PT",
+  EASTERN: "ET",
+  CENTRAL: "CT",
+  MOUNTAIN: "MT",
+};
+
+// Embedded declaration: the tz phrase appears INSIDE a line (parenthetical or suffix)
+// Conservative: must have the "times" trigger word adjacent to the tz token.
+// Forms matched:
+//   (all times PT), (all times in PT), (times in PT), (times: PT)
+//   "... all times PT", "... all times in PT", "... times are PT"
+// We do NOT match bare "Pacific Ocean" or "PT Roadmap" — requires "time" trigger.
+const STATED_ONCE_EMBEDDED_RE = new RegExp(
+  `(?:^|[\\s(,;—–-])(?:all\\s+)?(?:session\\s+)?times?\\s*(?:are\\s+(?:in\\s+)?|in\\s+|listed\\s+in\\s+|:\\s*)?[(]?\\s*(${ALL_TZ_ABBRS}|Pacific|Eastern|Central|Mountain)\\s*[)]?(?=[\\s,;)—–.!?]|$)`,
+  "i"
+);
+
+/**
+ * Try to detect a stated-once timezone header line.
+ * Returns the timezone abbreviation (uppercased) if this line is a stated-once header, else null.
+ * Stated-once headers are consumed and NOT rendered as rows.
+ *
+ * Matches:
+ *   - Standalone: entire line is a tz declaration ("All times PT")
+ *   - Embedded: declaration phrase appears inside a line
+ *     ("Summit 2026 — All times PT", "(all times PT)", "Times: PT")
+ */
+export function tryParseStatedOnceTz(line: string): string | null {
+  const trimmed = line.trim();
+
+  // Try strict standalone first
+  const m = STATED_ONCE_STANDALONE_RE.exec(trimmed);
+  if (m) {
+    const token = m[1].toUpperCase();
+    return TZ_WORD_MAP[token] ?? token;
+  }
+
+  // Try embedded form — but only if the line has NO time token
+  // (avoids mis-detecting "Opening Keynote 9:00 AM PT" as a stated-once header)
+  const hasTimeToken = /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b/i.test(trimmed);
+  if (!hasTimeToken) {
+    const em = STATED_ONCE_EMBEDDED_RE.exec(trimmed);
+    if (em) {
+      const token = em[1].toUpperCase();
+      return TZ_WORD_MAP[token] ?? token;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Auto-detect source timezone from the raw agenda text.
+ * Scans for a stated-once header (e.g. "All times PT") OR the first inline tz suffix
+ * on a time-bearing line (e.g. "2pm PT").
+ * Returns { abbr, origin, ianaZone } if detected, else null.
+ * PRECEDENCE: stated-once header > first inline per-session tz > null.
+ */
+export function detectSourceTz(text: string): {
+  abbr: string;
+  origin: string; // the raw origin string found in the text
+  originType: "stated-once" | "inline";
+  ianaZone: string;
+} | null {
+  const lines = text.split("\n");
+  let firstInline: { abbr: string; origin: string; ianaZone: string } | null = null;
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    // Check for stated-once header first
+    const statedAbbr = tryParseStatedOnceTz(trimmed);
+    if (statedAbbr) {
+      const iana = ianaFromAbbr(statedAbbr);
+      if (iana) {
+        return { abbr: statedAbbr, origin: trimmed, originType: "stated-once", ianaZone: iana };
+      }
+    }
+
+    // Check for inline tz on a time-bearing line
+    if (firstInline === null) {
+      const tzMatch = TZ_ABBR_RE.exec(trimmed);
+      if (tzMatch) {
+        // Only count as inline if the tz token is adjacent to a time token
+        // (i.e., the line successfully parses a time AND contains a tz abbr right after it)
+        const dummyParse = tryParseTime(trimmed, "UTC"); // use UTC as placeholder default
+        if (dummyParse && dummyParse.tzAbbr && dummyParse.tzAbbr !== "UTC") {
+          const abbr = dummyParse.tzAbbr.toUpperCase();
+          const iana = ianaFromAbbr(abbr);
+          if (iana) {
+            firstInline = { abbr, origin: trimmed, ianaZone: iana };
+          }
+        }
+      }
+    }
+  }
+
+  if (firstInline) {
+    return { ...firstInline, originType: "inline" };
+  }
+  return null;
 }
 
 // ── Main parse function ───────────────────────────────────────────────────
@@ -664,10 +920,47 @@ function extractTitle(line: string): string {
 export interface ParseOptions {
   sourceTimezone: string; // IANA zone e.g. "UTC"
   referenceDate?: Date; // for testing; defaults to "today"
+  /**
+   * If provided, sessions with no inline tz will use this abbr
+   * (from the stated-once header). This overrides the sourceTimezone
+   * for those sessions specifically.
+   * Value is the IANA zone string derived from the stated-once abbr.
+   */
+  statedOnceIana?: string;
+  /**
+   * When the user has actively changed the "Override source timezone" selector,
+   * this IANA zone takes precedence over statedOnceIana (and sourceTimezone) for
+   * sessions that have no inline tz token. Inline per-session tz is always authoritative
+   * and cannot be overridden by this.
+   *
+   * Precedence (from most to least authoritative):
+   *   1. Inline per-session tz token
+   *   2. manualOverrideIana  ← user explicitly changed the selector
+   *   3. statedOnceIana      ← stated-once header ("All times PT")
+   *   4. sourceTimezone      ← fallback selector value
+   */
+  manualOverrideIana?: string;
+  /**
+   * The abbreviation that corresponds to manualOverrideIana, for display in sourceTime.
+   */
+  manualOverrideAbbr?: string;
+}
+
+/**
+ * A note row that carries a "no time — not exported" hint for display in the creator view.
+ * Extended from NoteLine so it's visible in the row but excluded from .ics.
+ */
+export interface NoteLineWithHint extends NoteLine {
+  noTimeHint: true;
 }
 
 export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
   const lines = text.split("\n");
+  // We accumulate "session rows" separately so we can sort them chronologically,
+  // while keeping all rows (dateheader, note, unparsed) in their original positions
+  // for line-accounting purposes.
+  // Strategy: collect all rows in input order, then stable-sort the sessions.
+
   const rows: AgendaRow[] = [];
 
   let currentDateStr: string | null = null; // YYYY-MM-DD
@@ -679,6 +972,13 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
 
   // Find the source timezone abbreviation from the IANA zone
   const sourceIana = options.sourceTimezone;
+  // statedOnceIana: when a stated-once header is in the text, sessions with no inline tz
+  // use this zone (higher priority than sourceIana for those sessions).
+  const statedOnceIana = options.statedOnceIana ?? null;
+  // manualOverrideIana: when the user actively changed the selector, wins over statedOnceIana.
+  const manualOverrideIana = options.manualOverrideIana ?? null;
+  const manualOverrideAbbr = options.manualOverrideAbbr ?? null;
+
   // Default abbr: find first key that maps to the sourceIana, or use UTC
   const defaultAbbr =
     Object.entries(TZ_ABBR_TO_IANA).find(
@@ -690,6 +990,13 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
 
     // Skip blank lines
     if (!trimmed) continue;
+
+    // Check for stated-once tz header (e.g. "All times PT") — consume as config, not a row
+    if (tryParseStatedOnceTz(trimmed)) {
+      // These lines are NOT rendered as rows — they're pure configuration signals.
+      // The detection result is surfaced in the UI via detectSourceTz().
+      continue;
+    }
 
     // Check for date header
     const dateHeaderDate = tryParseDateHeader(trimmed);
@@ -719,8 +1026,8 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
           currentDateStr = embeddedDate;
           rows.push({ type: "dateheader", rawLine: trimmed, date: embeddedDate });
         } else {
-          // Pure timeless note/header, NOT an error
-          rows.push({ type: "note", rawLine: trimmed });
+          // Pure timeless note/header — add "no time — not exported" hint
+          rows.push({ type: "note", rawLine: trimmed, noTimeHint: true } as NoteLineWithHint);
         }
       }
       continue;
@@ -742,8 +1049,36 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
       day = parts[2];
     }
 
-    // Resolve timezone — if unrecognized, fall back to source tz but flag it
-    const resolvedIana = ianaFromAbbr(timeParse.tzAbbr) ?? sourceIana;
+    // PRECEDENCE for timezone resolution:
+    // 1. Inline tz token on THIS line (most authoritative — explicit per-session)
+    // 2. manualOverrideIana — user explicitly changed the selector (beats stated-once)
+    // 3. Stated-once header tz (statedOnceIana) — only when no inline tz and no manual override
+    // 4. Source tz selector (sourceIana) — fallback of last resort
+    //
+    // An "inline tz" means the parser found a tz token from the TZ_ABBR_RE match.
+    // We detect whether the timeParse's tzAbbr came from the line itself vs the defaultAbbr
+    // by comparing: if tzAbbr === defaultAbbr AND the line doesn't actually contain that abbr
+    // verbatim, it used the fallback.
+    const lineContainsExplicitTz = hasExplicitTzToken(trimmed, timeParse.tzAbbr, defaultAbbr);
+    let resolvedIana: string;
+    let resolvedAbbr: string; // abbreviation for display in sourceTime
+    if (lineContainsExplicitTz) {
+      // Explicit inline tz — authoritative for this session
+      resolvedIana = ianaFromAbbr(timeParse.tzAbbr) ?? sourceIana;
+      resolvedAbbr = timeParse.tzAbbr; // already in the sourceDisplay from tryParseTime
+    } else if (manualOverrideIana) {
+      // User manually changed the override selector — wins over stated-once
+      resolvedIana = manualOverrideIana;
+      resolvedAbbr = manualOverrideAbbr ?? (Object.entries(TZ_ABBR_TO_IANA).find(([, v]) => v === manualOverrideIana)?.[0] ?? "");
+    } else if (statedOnceIana) {
+      // No inline tz — use stated-once header tz
+      resolvedIana = statedOnceIana;
+      resolvedAbbr = Object.entries(TZ_ABBR_TO_IANA).find(([, v]) => v === statedOnceIana)?.[0] ?? "";
+    } else {
+      // Fallback to source tz selector
+      resolvedIana = ianaFromAbbr(timeParse.tzAbbr) ?? sourceIana;
+      resolvedAbbr = timeParse.tzAbbr; // already in sourceDisplay
+    }
 
     // Convert wall time to UTC
     const startUtc = wallToUtc(
@@ -775,12 +1110,24 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
 
     const title = extractTitle(trimmed);
 
+    // P1-1 FIX: For non-inline sessions, timeParse.sourceDisplay uses defaultAbbr (e.g. "UTC"),
+    // but the session was actually resolved to resolvedIana/resolvedAbbr.
+    // Replace the defaultAbbr in the display string with the actual applied tz abbreviation
+    // so the per-card label agrees with the detection banner and the DTSTART.
+    let sourceTime = timeParse.sourceDisplay;
+    if (!lineContainsExplicitTz && resolvedAbbr && resolvedAbbr !== defaultAbbr) {
+      // The display string ends with defaultAbbr — replace it with resolvedAbbr
+      // Use a suffix replacement to avoid touching time-part numbers
+      const trailingAbbrRe = new RegExp(`\\b${defaultAbbr}$`, "i");
+      sourceTime = timeParse.sourceDisplay.replace(trailingAbbrRe, resolvedAbbr);
+    }
+
     const session: ParsedSession = {
       type: "session",
       title,
       startUtc,
       endUtc,
-      sourceTime: timeParse.sourceDisplay,
+      sourceTime,
       rawLine: trimmed,
       dateCross, // will be computed per viewer in the component
       ...(hasNoDate ? { hasNoDate: true } : {}),
@@ -799,7 +1146,60 @@ export function parseAgenda(text: string, options: ParseOptions): AgendaRow[] {
     rows.push(session);
   }
 
-  return rows;
+  // Chronological sort: stable-sort sessions within the rows array.
+  // Non-session rows keep their positions; sessions are re-ordered chronologically.
+  // We extract sessions, sort them, then rebuild the array replacing session slots in order.
+  return sortRowsChronologically(rows);
+}
+
+/**
+ * Check whether a line contains an explicit tz token that drove the parse result,
+ * vs the defaultAbbr fallback being used.
+ * Returns true when the line has the tzAbbr as a word-boundary match that is
+ * NOT the same as the defaultAbbr (or when tzAbbr is the defaultAbbr but the
+ * line literally contains that abbreviation adjacent to a time token).
+ */
+function hasExplicitTzToken(line: string, tzAbbr: string, defaultAbbr: string): boolean {
+  if (tzAbbr === defaultAbbr) {
+    // The default abbr was used — check if the line actually contains the abbr explicitly
+    // (so "9:00 AM PT" with defaultAbbr "PT" still counts as explicit)
+    const re = new RegExp(`\\b${tzAbbr}\\b`, "i");
+    return re.test(line);
+  }
+  // tzAbbr differs from defaultAbbr — it was explicitly parsed from the line
+  return true;
+}
+
+/**
+ * Stable-sort the rows chronologically by session startUtc.
+ * Non-session rows keep their original relative order among themselves.
+ * Sessions are extracted, sorted, and placed back in the slots where sessions were.
+ * Preview order == .ics VEVENT order == chronological.
+ */
+function sortRowsChronologically(rows: AgendaRow[]): AgendaRow[] {
+  // Find all session indices
+  const sessionIndices: number[] = [];
+  const sessions: ParsedSession[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].type === "session") {
+      sessionIndices.push(i);
+      sessions.push(rows[i] as ParsedSession);
+    }
+  }
+
+  if (sessions.length === 0) return rows;
+
+  // Stable sort sessions by startUtc
+  const sortedSessions = [...sessions].sort(
+    (a, b) => a.startUtc.getTime() - b.startUtc.getTime()
+  );
+
+  // Rebuild rows: replace session slots with sorted sessions
+  const result = [...rows];
+  for (let i = 0; i < sessionIndices.length; i++) {
+    result[sessionIndices[i]] = sortedSessions[i];
+  }
+  return result;
 }
 
 /**
@@ -927,6 +1327,13 @@ export function buildAllSessionsIcs(sessions: ParsedSession[]): string | null {
 export interface AgendaState {
   text: string;
   sourceTimezone: string;
+  /**
+   * The APPLIED source timezone abbreviation (e.g. "PT", "CET").
+   * Persisted into the share link so the attendee view shows the same source-tz label
+   * as the creator saw — even when it was auto-detected and the selector still shows "UTC".
+   * Optional for backward-compat with old share links (attendees will re-detect or use sourceTimezone).
+   */
+  appliedSourceTzAbbr?: string;
 }
 
 export function encodeAgendaState(state: AgendaState): string {

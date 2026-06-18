@@ -1,51 +1,44 @@
----
-tester: 4
-name: Tomás
-clarity: Yes
-value: Yes
-advocacy: 8
-prior_concerns_addressed: Yes
----
+# Round 2 — Tester 4 (Tomás, Ops analyst, Edge/Windows, medium-tech)
 
-RE-CHECK OF MY ROUND-1 COMPLAINTS (in order):
+In-audience: YES. Round 1 advocacy: 9. I'm the regression sentinel here.
 
-1. "No on-screen statement that data stays in the browser." FIXED. Right under the Copy
-   button, in plain language: "Runs entirely in your browser; nothing is uploaded — your
-   agenda travels inside the link itself." That is almost verbatim the line I asked for.
-   This is the single thing that was blocking me from trusting it with internal schedules.
+## Re-check of my prior concerns
+- My round-1 ask was structured Excel/Outlook paste — still parked/out-of-scope. Not a blocker, just the remaining gap to a 10. No regression.
+- Privacy disclosure I'd cared about earlier ("Runs entirely in your browser; nothing is uploaded… the share link contains your full agenda") is STILL present, verbatim, under the Copy button. Good.
+- The link-is-the-data tradeoff (no expiry/revocation) is unchanged — inherent to the no-server design and still honestly disclosed. Acceptable to me; I decide per-event whether to send the link.
 
-2. "Share link silently contains the full agenda; no warning it leaks if forwarded."
-   ADDRESSED. The same note ends with "The share link contains your full agenda." So now
-   it's explicit: I know that anyone with the link can read everything. That's the honest
-   disclosure I wanted — it lets me decide per-event whether to send it, instead of being
-   surprised. I'd still love a one-word "(treat the link like the agenda itself)" but the
-   facts are stated, which is what matters for a wary corporate user.
+## Round-2 builder claims — verified live (Chromium ≈ Edge, my tz = America/New_York)
+Pasted my OWN agenda: `Summit 2026 — All times PT` / date / `2:00 PM PT Roadmap — Q3` / `10:00 AM PT Opening Keynote` / `Networking Break` (no time) / `9:00 AM Morning Standup` (out of order).
 
-3. "Bare '10am' flagged unreadable." FIXED. I pasted "Manager Sync - 10am" and it parsed
-   it against the source timezone: "10:00 AM UTC → 3:00 AM (your time)". No error. That's
-   exactly the fallback behavior I argued for, and it's how my team actually writes times.
+1. **Embedded source-tz detect + override snap**: "Detected source timezone: PT — from 'Summit 2026 — All times PT'". Override selector auto-snapped to **PT (America/Los_Angeles)**. PASS.
+2. **No "UTC" lie**: my-time header = **"Times shown in your timezone: America/New_York"** (real applied tz). PASS.
+3. **Title extraction**: "10:00 AM PT Opening Keynote" → **"Opening Keynote"** (PT stripped, "10:00 AM PT" kept as source label). "2:00 PM PT Roadmap — Q3" → **"Roadmap — Q3"** (prefix stripped, title intact). PASS.
+4. **No-time row**: "Networking Break" → divider, **"no time — not exported"**, not faked into an event. PASS.
+5. **Out of order**: re-sorted Standup 9AM → Keynote 10AM → Roadmap 2PM. PASS.
+6. **Conversions**: 9AM PT→12PM ET, 10AM PT→1PM ET, 2PM PT→5PM ET. All correct. PASS.
 
-FRESH RUN with a realistic internal all-hands (UTC + IST + CET + PT, codename "Project
-Falcon"):
-- Per-line timezone honored over the source dropdown. Half-hour zones nailed: 9:00 AM IST
-  → 8:30 PM PT (-1 day), 3:30 PM CET → 6:30 AM PT. 14:00 UTC → 7:00 AM PT. All correct.
-- Opened the share link as a Tokyo attendee: read-only "Agenda" view, auto-detected
-  Asia/Tokyo, 14:00 UTC → 11:00 PM, with a clear orange "+1 day" badge on the West Coast
-  session and the original time shown beneath each. Math verified correct end to end.
-- Share link is a ~337-char URL with the data in the #fragment, consistent with the
-  no-server claim. Calendar buttons + .ics still present on the attendee side.
+## Share link → attendee (opened cold in Europe/London, a 3rd tz)
+- "Source timezone: PT" travels in the link. "Times shown in your timezone: **Europe/London**" (NOT UTC).
+- Re-localized: 5PM / 6PM / 10PM London. Source labels (9:00 AM PT…) preserved. **Source-tz indicator, header, and per-card labels all AGREE — no UTC lie anywhere.** PASS.
 
-VALUE vs today: I still do this in Excel TZ formulas + manual Teams paste. Now that I can
-trust where the data goes AND it handles my bare-time shorthand, this genuinely beats my
-workflow for the share-out and the attendee calendar buttons. Moving from Marginal to Yes
-— I'd now use it for internal all-hands, not just public webinars.
+## Combined .ics
+3 VEVENTs (Networking Break correctly excluded). DTSTART UTC matches PT source (16:00/17:00/21:00Z). Clean SUMMARY, source time in DESCRIPTION. PASS.
 
-ADVOCACY 8: I'd bring this up to peers who schedule cross-region meetings. The privacy
-disclosure, correct half-hour math, and bare-time fallback all landed. Not a 9/10 because
-the link-is-the-data tradeoff means no revocation/expiry — for a leaked internal link
-there's no undo, and a security-conscious teammate will ask about that. But it's honest
-about it, so I can recommend it with that one caveat stated.
+## No-server / no-account (matters a LOT — internal schedule data)
+Network watched on creator AND attendee: only GETs + RSC payload. **Zero POSTs, zero upload.** Agenda lives in the URL #fragment (never sent to server). I'd paste an internal all-hands here. PASS.
+
+## Mobile 375px
+Stacks cleanly (summary card + "See all", paste box, PT override, full preview). Conversions match desktop. No overflow. Minor: the "Detected source timezone" banner shown on desktop isn't surfaced in the mobile top summary — implied by the override snap, not a blocker.
+
+## Answers
+- **Clarity: Y** — "Paste an agenda, share one link, everyone sees their own local time."
+- **Value: Y** — Today I hand-build TZ tables in Excel and paste converted times into Teams invites; people still mis-read them. One self-localizing link + bulk .ics kills that. Saves real minutes weekly.
+- **Use + advocate: Yes to both.** I'd send it to the other regional coordinators.
+- **Advocacy: 9/10.**
+- **ONE thing stopping a 10**: still no structured Excel/tab-separated paste — when I copy a schedule grid out of Excel (time | session | owner) it lands as raw lines, not mapped columns. Free-text is excellent; Excel-native paste is where my data actually lives.
+
+## Regression vs round 1: NONE. All three round-2 fixes landed correctly; nothing previously working broke.
 
 ```json
-{"tester": 4, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 8, "topComplaints": ["Share link has no expiry/revocation — a forwarded internal link can't be unshared (disclosure is now present, but no mitigation)"], "priorConcernsAddressed": "all"}
+{"tester": 4, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["No structured Excel/tab-separated paste — Excel grid lands as raw text, not mapped columns", "Mobile top summary omits the 'Detected source timezone' banner shown on desktop (minor)"], "priorConcernsAddressed": "n/a"}
 ```

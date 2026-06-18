@@ -1,47 +1,67 @@
----
-tester: 6
-name: Jules
-clarity: Yes
-value: Yes
-advocacy: 9
-prior_concerns_addressed: Yes
----
+# Round 2 — Tester 6 (Jules, Content & community marketer) — in-audience: YES
 
-I'm Jules — weekly community office-hours + AMA for a globally distributed Discord. Last
-round I gave a 6: the concept was great but the parser only accepted HH:MM, so my real
-schedule (full of "6pm", "9am") bounced with yellow "Couldn't read a time" warnings.
+Round 1 advocacy: 9. Regression sentinel re-test.
 
-**My top fix — accept bare-hour am/pm — IS FIXED.** I pasted my schedule the way I actually
-write it and every single line parsed, zero warnings:
-- "6pm ET" → 6:00 PM ET (3:00 PM my time) ✓
-- "9am ET" → 9:00 AM ET ✓
-- "noon ET" → kept "noon ET", converted to 9:00 AM my time ✓
-- "11 p.m. ET" → 11:00 PM ET ✓
-- "7 PM ET" → 7:00 PM ET ✓
-That's exactly the formats that all failed last round. This is the thing that was blocking
-me, and it now Just Works. I could paste my pinned Discord message verbatim.
+## Round-1 complaint re-check (the ONE thing I flagged)
+**Defect:** override dropdown defaulted to UTC even after correctly detecting PT — the
+control contradicted the correct preview.
+**Status: FIXED.** I pasted an agenda whose header embeds "Summit 2026 — All times PT". The
+"Override source timezone" selector now reads **PT (America/Los_Angeles)** on both desktop
+(1280px) and mobile (375px). It snaps to the detected tz; no more UTC lie. Banner says
+*"Detected source timezone: PT — from 'Summit 2026 — All times PT'"* and the local header
+reads *"Times shown in your timezone: America/Los_Angeles"*. All three agree.
+(Bonus: the older "✓ Copied!" label-flip gripe is also fixed — button flips on click.)
 
-**Clarity — Yes.** Same strong headline "Your agenda, in everyone's timezone." + subhead
-"Paste your sessions, share one link — each person sees their own local time." Pitch lands
-in under 5 seconds. Prefilled sample + live preview, no guessing.
+## Everything verified fresh this round
+Pasted, messy ordering + a no-time row:
+```
+Summit 2026 — All times PT
+PT Roadmap — Q3 — 3:00 PM
+10:00 AM PT Opening Keynote
+Closing Remarks
+9:00 AM PT Early Birds Coffee
+```
+- Embedded "All times PT" header → auto-detected. PASS
+- "10:00 AM PT Opening Keynote" → title **"Opening Keynote"** (PT/time stripped). PASS
+- "PT Roadmap — Q3" → kept verbatim as **"PT Roadmap — Q3"** (PT kept as part of name). PASS
+- "Closing Remarks" (no time) → **"no time — not exported"**, omitted from .ics. PASS
+- Out-of-order input → preview sorted 9AM, 10AM, 3PM. PASS
+- Share link: 329 chars, agenda encoded in URL fragment, nothing uploaded.
+- Attendee view (forced Europe/Paris): header **"Source timezone: PT"** +
+  **"Times shown in your timezone: Europe/Paris"** — source tz traveled, no UTC lie. Times
+  re-localized correctly (9AM PT → 6:00 PM Paris; 3PM PT → 12:00 AM +1 day). PASS
+- Combined .ics: clean VCALENDAR, 3 VEVENTs (no-time row omitted), source time in
+  DESCRIPTION, imports for Google/Apple/Outlook. PASS
+- Mobile 375px: no horizontal overflow, preview-first layout, selector snaps to PT. PASS
+- 0 console errors across all runs.
 
-**Value — Yes (was Marginal).** Today I hand-type a few timezone conversions into a pinned
-Discord message every week. This now beats that cleanly because I no longer pay a re-entry
-tax — I paste as-is and get a self-contained share link (no login, agenda lives in the URL
-hash). I confirmed the share link copies (valid `/#...` URL read from clipboard) and that
-each session has Add-to-Google-Calendar + Download .ics. And my round-1 minor gripe — those
-calendar buttons only showed on the shared view — is also fixed: they now appear in the
-editor preview too, so I know they exist before I share. Mobile at 375px: single column,
-scrollWidth exactly 375, no horizontal scroll, clean. No console errors.
+## This is literally my job
+Weekly Discord office-hours/AMA for a globally distributed community. Today I hand-type
+"10 AM PT / 1 PM ET / 6 PM London / 7 PM Paris" into a pinned Discord post + Notion page
+every week, and someone always misreads it across DST. One no-login link where each person
+sees their own time + an .ics = a real weekly chore deleted.
 
-**Advocacy — 9 (was 6).** The blocker is gone, so I'd post this in my Discord and bring it
-up unprompted to other community managers. Not a 10 only because of one small thing: when I
-clicked "Copy share link" the button label didn't visibly flip to a "Copied!" confirmation
-in my test (the link DID copy — I read it back from the clipboard, so copy works; clipboard
-verified, label-flip not observed). For a no-login tool, that little "✓ Copied!" reassurance
-matters when I'm posting fast — I want to be sure before I paste into Discord. That's the
-only thing between this and a 10.
+## The ONE thing stopping a 10
+With NO date header, every card shows an orange **"No date found — add a date header line"**
+warning AND the .ics silently dates everything to *today* (DTSTART 20260618). For a recurring
+weekly series that's a footgun — events land on the wrong day, and the warning is loud
+(repeated once per card) but non-blocking. I'd want an inline date picker, or the warning
+collapsed to ONE line at top instead of stamped on all 3 cards. Minor, not a regression.
+
+## Answers
+1. USE: Yes, weekly. ADVOCATE: Yes — I'd post this to other community managers unprompted.
+2. **Advocacy: 9/10.**
+3. ONE blocker to a 10: undated-agenda handling — per-card warning repeated + silent
+   "today" fallback in the .ics.
+
+Clarity: **Yes** (headline + "share one link — each person sees their own local time" = clear
+in <10s). Value: **Yes** (kills a real weekly hand-typed tz-conversion chore; no login).
+
+Regression vs round 1: **NONE.** Selector-default defect: **FIXED** (snaps to PT on desktop
+and mobile; detected tz travels in share link and attendee header).
 
 ```json
-{"tester": 6, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["Copy-share-link button did not visibly flip to a 'Copied!' confirmation in this run (link did copy, but no on-screen reassurance before posting)"], "priorConcernsAddressed": "all"}
+{"tester": 6, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 9,
+ "topComplaints": ["Undated agenda: 'No date found' warning repeated on every card AND .ics silently dates everything to today — wrong-day footgun for a weekly series", "Want an inline date picker instead of needing a date-header line"],
+ "priorConcernsAddressed": "all"}
 ```

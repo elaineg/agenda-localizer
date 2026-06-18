@@ -1,27 +1,23 @@
----
-tester: 1
-name: Priya
-clarity: Yes
-value: Marginal
-advocacy: 7
----
+NAME: Priya | IN-AUDIENCE: yes (runs cross-tz multi-session syncs) | ADVOCACY: 9 | CLARITY: Y | VALUE: Y | BLOCKER: Override source-tz is a fixed 11-preset list with no arbitrary IANA entry — only real gap.
 
-**Clarity — Yes.** Headline "Your agenda, in everyone's timezone." + subhead "Paste your sessions, share one link — each person sees their own local time." told me exactly what it is and who it's for in under 5s. The pre-loaded sample with a live "Localized preview" column and a "Times shown in your timezone: America/Los_Angeles" bar sealed it. No signup wall — instant respect.
+I run on-call/incident syncs + an OSS contributor call across US/EU/India and live in "what time is that for me?" hell. This is exactly the thing I'd paste into instead of hand-building a worldtimebuddy table.
 
-**Value — Marginal (leaning Yes).** Today I solve this by pasting a UTC schedule into Slack and fielding "what time is that for me?" all day, or hand-building a everytimezone.com link. This is faster than both: I paste my 5-line on-call/contributor agenda, copy one link, done. The parser is genuinely good — it handled `16:00 UTC`, `9:00 AM IST`, `9:00 AM PT`, `5:00 PM ET`, ranges (`14:00–15:00 UTC` → `7:00–8:00 AM`), and bare `10:00`/`12:00pm` falling back to the source-tz dropdown. Math checked out across LA/India. What keeps it at Marginal not Yes: **no add-to-calendar / .ics export**, which is the thing my teammates actually want — they don't want to re-read a webpage at call time, they want it on their calendar. Without that I'm still doing half the job manually.
+CLARITY (Y): "Your agenda, in everyone's timezone — paste, share one link, each person sees their own local time" told me what it is and who it's for in ~5s. No jargon, no signup wall, no marketing fluff.
 
-**Advocacy — 7.** I'd mention it if a teammate complained about timezone math, but not bring it up unprompted. What holds it back:
+NETWORK-TAB CHECK (this decides it for me): only external host in the markup is calendar.google.com, fired solely by clicking "Add to Google Calendar". The .ics is a `data:text/calendar` URI generated in-browser. Share link carries the agenda inside the URL (#hash, ~193 chars) — nothing phones home. "Runs entirely in your browser; nothing is uploaded" is TRUE, not a claim. This earns the recommend.
 
-Frictions/bugs:
-- **No calendar export.** Expected "Add to Google/Outlook/.ics" per session or for the whole agenda; there's nothing. For a recurring on-call sync, the link localizes but doesn't get the event onto anyone's calendar — the last mile is missing.
-- **"noon CET" and named European zones fail.** I typed `Kickoff — noon CET` → "Couldn't read a time." A skeptical engineer expects `noon` and common zone names (CET/CEST/JST) to work, not just offsets/US abbreviations.
-- **Share link only updates the URL on Copy, not live.** The address bar stays clean while I edit; the encoded state only lands in the hash when I hit "Copy share link." Minor, but I bookmarked the bare URL once and lost my agenda. Live-updating the hash (or a visible "your link" field) would reassure me nothing's lost.
-- **`vercel.live/feedback/feedback.js` loads.** I checked the network tab (the whole reason I trust paste tools). Good news: agenda lives entirely in the URL fragment, never POSTed anywhere — truly client-side, nothing phones home with my data. The only external script is Vercel's own feedback widget. I'd strip it for a "we send nothing" guarantee, but it's not a dealbreaker.
+TRAP CASES — all passed:
+- "PT Roadmap — Q3" NOT misread as a timezone; stayed a session title, detected source still PT from the header line.
+- No-time row "TBD breakout — sometime later" → "no time — not exported". Graceful, not silently dropped.
+- Out-of-order input re-sorted to chronological (8/9/11am, then 3pm).
+- Override PT→BST→JST genuinely reconverts: 9:00 AM PT=9:30 PM IST, BST=1:30 PM IST, JST=5:30 AM IST — all correct, and the per-session sub-label updates ("9:00 AM BST"), not stale.
+- Attendee view is read-only (no textarea), keeps Download-all + per-session .ics. Correct.
+- Mobile 375px: preview floats up with "See all"/"+2 more", full-width tappable download. Clean.
 
-What I liked: instant, no account, privacy-clean (state in URL hash), per-line error hints, ranges supported, sensible tz dropdown covering US/EU/India.
+VALUE (Y): beats my worldtimebuddy-tab + manual-message workflow — one paste, one link, teammates self-serve. Real recurring weekly effort saved.
 
-**Single change that most raises advocacy:** add per-session and whole-agenda calendar export (.ics + Google link). That turns "nice converter" into "I send this to my contributor list and never field a timezone question again" — a 7 becomes a 9.
+HOLDS IT BACK FROM 10: override is a closed list of 11 city presets, no free IANA entry — if a source zone isn't one of the 11 I can't force it. Minor; auto-detect covered every header I threw at it. No actual bug found, so it's a 9.
 
 ```json
-{"tester": 1, "round": 1, "clarity": "Yes", "value": "Marginal", "advocacy": 7, "topComplaints": ["No add-to-calendar / .ics export — last mile to teammates' calendars is missing", "'noon' and named zones like CET fail to parse", "share link only writes to URL on Copy, not live — lost an edited agenda once"], "priorConcernsAddressed": "n/a"}
+{"tester": 1, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["Override source-tz is a fixed 11-preset list, no arbitrary IANA zone entry", "Detected-source banner could show the UTC offset used so I can sanity-check DST instead of trusting silently"], "priorConcernsAddressed": "n/a"}
 ```

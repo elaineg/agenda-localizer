@@ -1,57 +1,21 @@
----
-tester: 4
-name: Tomás
-clarity: Yes
-value: Marginal
-advocacy: 6
----
+NAME: Tomás | IN-AUDIENCE: yes (schedules cross-region all-hands/training) | ADVOCACY: 9 | CLARITY: Y | VALUE: Y | BLOCKER: Input is free-text only — I can't paste a structured Excel/Outlook block; a slightly-off line just becomes a "no time" non-event.
 
-I run scheduling for a distributed ops team, so a tool that turns one agenda into
-"everyone sees their own local time" is instantly legible. The H1 "Your agenda, in
-everyone's timezone." plus the subhead and a pre-filled live preview told me what it does
-in under 5 seconds. No login wall, no install — that alone clears my IT-blocks-everything
-bar.
+RE-TEST OF MY PRIOR 3 BLOCKERS (last round: advocacy 6) — all three FIXED:
+1. No on-screen "data stays in browser" statement → FIXED. Page now reads: "Runs entirely in your browser; nothing is uploaded — your agenda travels inside the link itself." Plain-language, exactly what I asked for.
+2. Share link silently held the full agenda, no warning → FIXED. Same line adds "The share link contains your full agenda." The internal-leak risk is now disclosed up front.
+3. Bare "10am" flagged "Couldn't read a time" → FIXED. "Manager Sync - 10am" now parses to 10:00 AM PT → 1:00 PM ET, falling back to the source zone. That was my most common input pattern.
+priorConcernsAddressed: all.
 
-WHAT WORKED
-- Pasted a real mixed-region all-hands (UTC + 9:00 AM IST + 3:30 PM CET + 11:00 AM PT). It
-  correctly honored the per-line timezone instead of forcing the source dropdown — 14:00
-  UTC → 7:00 AM PT, 9:00 AM IST → 8:30 PM PT. That half-hour offset (IST/CET) is exactly
-  where I make mistakes by hand, and it nailed it.
-- Share link copies cleanly (button flips to "✓ Copied!"). Opened it as a Tokyo attendee:
-  read-only view, auto-detected Asia/Tokyo, 14:00 UTC → 11:00 PM with the original UTC
-  shown underneath. Math correct.
-- "Add to Google Calendar" is a real render-template link; "Download .ics" produced a
-  valid VEVENT (DTSTART in UTC). Both work. That's the part my attendees actually need.
+CLARITY: Y. H1 + subhead + pre-loaded sample told me the job in <10s.
 
-WHAT HOLDS ME BACK (the wariness problem)
-- I paste INTERNAL schedule details. The whole reason I'd trust this is the no-server
-  claim — and there is NO such claim anywhere on the page. I had to inspect the share URL
-  myself to discover the data is encoded in the `#fragment` (so it never hits the server).
-  A non-technical colleague would never know that, and even I want it stated. One line —
-  "Runs entirely in your browser. Nothing is uploaded or stored." — would flip this from
-  Marginal to Yes for me.
-- Counterpoint that worried me: the share link IS the data. Anyone with the link decodes
-  the full agenda. For a public webinar that's fine; for an internal all-hands with room
-  names / project codenames, a forwarded link leaks everything. No expiry, no "this link
-  contains your agenda" warning.
-- "Manager Sync - 10am" got flagged "Couldn't read a time." Bare 10am with no zone is the
-  single most common way my team writes times. I get WHY (ambiguous), but it felt like the
-  parser quit on normal input. It should fall back to the source timezone for bare times.
+VALUE: Y. I tested every hard case fresh and it passed: "PT Roadmap — Q3" parsed as a TITLE (not mistaken for a timezone); "All times PT" detected once; override source tz reconverts live (CET → 9 AM became 3 AM ET); out-of-order rows auto-sort; no-time rows shown greyed "no time — not exported" (nothing silently dropped); combined .ics = valid VEVENTs with correct UTC-Z; attendee view in a fresh Tokyo browser showed both "9:00 AM PT" and "1:00 AM (your time) +1 day", no paste box.
 
-VALUE vs today: I do this in Excel with TZ formulas + manual paste into Teams. This is
-faster for the share-out and the attendee calendar buttons are nicer than what I do now.
-But I only ship ~2-3 of these a week and the privacy ambiguity means I'd hesitate on the
-internal ones — so Marginal, not a clear win.
+NO-SERVER CHECK (my deal-breaker): logged ZERO POST/PUT requests all session; agenda lives in the URL hash. The claim is literally true — flips me from wary to willing to paste a real internal schedule.
 
-ADVOCACY 6: genuinely useful and the timezone math is trustworthy, but I won't recommend
-it to peers for COMPANY data until the page tells me where my data goes. I'd recommend it
-today only for public/community events.
+Today I do this in Excel TZ formulas + hand-typing "9 PT / 12 ET / 5 BST" into Teams and still field "what time for me?" DMs. This replaces all of it.
 
-TOP FIX: Add a visible, plain-language privacy line ("Runs entirely in your browser —
-nothing is uploaded or saved; your agenda travels inside the link itself") plus a small
-note that the share link contains the full agenda. That one change addresses my exact
-blocker and lifts this to an 8.
+WHY 9 not 10: free-text input only. My agendas live in Excel/Outlook; I retyped into the box, and an odd line becomes a "no time" non-event with no nudge to fix it. A paste-a-table mode (or "fix this line" hint) makes it a 10. Nit: attendee label shows "Europe/Paris" for CET — right but reads oddly to non-technical attendees.
 
 ```json
-{"tester": 4, "round": 1, "clarity": "Yes", "value": "Marginal", "advocacy": 6, "topComplaints": ["No on-screen statement that data stays in the browser / never hits a server — the exact reassurance a wary corporate user needs", "Share link silently contains the full agenda; no warning that forwarding it leaks internal details", "Bare times like '10am' flagged unreadable instead of falling back to the source timezone"], "priorConcernsAddressed": "n/a"}
+{"tester": 4, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["Free-text input only — can't paste a structured Excel/Outlook table; must retype", "Odd/malformed time lines silently become 'no time — not exported' with no fix-it nudge", "Attendee tz label shows IANA name (Europe/Paris) for CET — slightly confusing to non-technical attendees"], "priorConcernsAddressed": "all"}
 ```

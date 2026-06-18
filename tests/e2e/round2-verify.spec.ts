@@ -37,9 +37,9 @@ test("2b: timeless line is note row; 26:00 UTC is flagged in creator", async ({ 
   await textarea.fill("Day 1 — Summit\n9:00 AM PT — Real Session\nTalk — 26:00 UTC");
   await page.waitForTimeout(500);
 
-  // "Day 1 — Summit" should be a note (italic text, NOT amber)
-  // Use .first() to avoid strict mode violation when both mobile and desktop panels render
-  const noteEl = page.locator("p.italic").first();
+  // "Day 1 — Summit" should be a note (italic text with slate-400 color, NOT amber)
+  // Use the specific note row class to avoid matching per-card "no date" italic labels
+  const noteEl = page.locator("p.text-xs.text-slate-400.italic").first();
   await expect(noteEl).toBeVisible({ timeout: 3000 });
   const noteText = await noteEl.innerText();
   expect(noteText).toContain("Day 1");

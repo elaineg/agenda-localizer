@@ -1,54 +1,22 @@
----
-tester: 10
-name: Sam
-clarity: Yes
-value: Yes
-advocacy: 8
----
+NAME: Sam | IN-AUDIENCE: yes (organizes cross-functional roadmap reviews across regions) | ADVOCACY: 8 | CLARITY: Y | VALUE: Y | BLOCKER: Shared/attendee view header says "Source timezone: UTC" while every row is correctly computed & labeled "PT" — that contradiction would make me hesitate to send the link to stakeholders.
 
-I'm Sam, a PM who runs cross-functional roadmap reviews with stakeholders in different
-regions and shares clean artifacts constantly. Tested on mobile (375px), then a laptop
-mindset for the stakeholder open.
+What it is (30s, mobile + desktop): "Paste your sessions, share one link — each person sees their own local time." Crystal clear headline, sample preloaded so I instantly saw the payoff. I'd pitch it to my team in one sentence.
 
-**Clarity — Yes.** Headline "Your agenda, in everyone's timezone." plus subhead "Paste
-your sessions, share one link — each person sees their own local time." told me exactly
-what it does and that it's for me in about 3 seconds. A textarea, a source-timezone
-dropdown, and a "Copy share link" button — zero ambiguity. This is the rare app I'd
-understand without reading anything.
+What I do today: I write the agenda in Notion and hand-type "(9am PT / 12pm ET / 6pm CET)" per session — people STILL show up at the wrong hour. This auto-localizes per-viewer and gives per-session + bulk .ics. Real recurring win — I run these reviews weekly across LA/NY/London/Tokyo.
 
-**Value — Yes (real recurring).** Today I do this by hand: I keep the agenda in Notion,
-then footnote "9am PT / 12pm ET / 5pm London / 1am Tokyo," and inevitably someone still
-asks "wait what time for me?" This app kills that. I paste sessions once, set source TZ,
-copy ONE link, and every stakeholder opens it and sees THEIR local time auto-detected
-(I confirmed: 09:00 UTC rendered as 6:00 PM in a Tokyo context). Each session even has
-"Add to Google Calendar" and "Download .ics" — both produce correct events (verified the
-ICS body and the GCal template URL carry the right UTC times). No login, link is fully
-self-contained in the URL hash. This is exactly my kind of shareable, look-organized
-artifact, and I'd use it weekly.
+What impressed me (I tried it all):
+- Source-tz detection read "All times PT" and did NOT get fooled by my "PT Roadmap — Q3" title. Correct.
+- Out-of-order sessions auto-sorted (Design Review 9am floated to top).
+- My no-time "Lunch & open discussion" row shown greyed: "no time — not exported." Nothing silently dropped.
+- Tokyo attendee saw "1:00 AM +1 day" with a clear +1 day badge and "9:00 AM PT" subline. Math is right.
+- Shared view clean & read-only (no paste box), mobile reflows well, "Copy as table" is a bonus for Notion.
 
-**Advocacy — 8.** I'd bring this up in a roadmap-planning Slack thread unprompted. It
-loses 2 points on the parser, which is brittle for how people actually type:
-- The agenda **title line** gets parsed as a session and shows a yellow "Couldn't read a
-  time" warning — and that warning persists in the SHARED stakeholder view, where they
-  can't fix it. My clean artifact has a yellow error band at the top. That's the thing
-  that would make me hesitate to send it to execs.
-- Real informal input fails: "standup 9am" and "retro 4 PM ET" both errored; it only
-  reliably reads colon formats like "9:00 AM PT". Worse, "sync at 2:30pm tomorrow" half-
-  parsed into "sync at tomorrow" and silently dropped the 2:30pm. A PM pasting live
-  meeting notes will see mostly yellow.
-- Mobile: session titles truncate ("Eng capacity de…") next to the calendar buttons.
-- No date inference (defaulted to tomorrow) — fine for now but I'd want to set a date.
+What holds it back from a 9:
+- THE blocker: shared view header literally reads "Source timezone: UTC" though detection found PT and every row uses PT. The detected PT never gets saved into the share link (the override selector also sits on "UTC" instead of pre-filling detected PT). Times are correct, but a stakeholder reading "UTC" distrusts the artifact — and looking organized is the whole reason I'd use this. I won't debug it; I'd fall back to Notion if questioned.
+- Minor: override should default to the DETECTED zone, not UTC.
 
-It degrades gracefully (no crashes, no console errors, and it literally tells you the
-format it wants), which is why it's still an 8 and not lower. But the title-as-error and
-the strict parser are what hold it back from a 9.
-
-**Highest-impact fix:** Don't treat a line with no time as a broken session — let me mark
-a heading (or auto-detect the first line as a title), and loosen the parser to read
-"9am" / "4 PM ET" / "2:30pm". A roadmap agenda has a heading and informal times; right now
-both produce yellow warnings on the artifact I'm trying to look organized with.
+Would I advocate? Yes, quietly — send it to one PM friend, not broadcast, until "UTC" matches the PT it's actually using.
 
 ```json
-{"tester": 10, "round": 1, "clarity": "Yes", "value": "Yes",
- "advocacy": 8, "topComplaints": ["Title/heading line parsed as a session and shows a persistent 'Couldn't read a time' warning, even in the shared stakeholder view", "Parser too strict: 'standup 9am' and 'retro 4 PM ET' fail; only colon formats like '9:00 AM PT' work, and 'sync at 2:30pm' silently dropped the time", "Mobile session titles truncate next to calendar buttons"], "priorConcernsAddressed": "n/a"}
+{"tester": 10, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 8, "topComplaints": ["Shared view header says 'Source timezone: UTC' while rows are correctly computed/labeled PT — detected zone not persisted into share link, erodes trust", "Override selector defaults to UTC instead of pre-filling the detected source zone"], "priorConcernsAddressed": "n/a"}
 ```

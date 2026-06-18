@@ -3,42 +3,43 @@ tester: 2
 name: Marcus
 clarity: Yes
 value: Yes
-advocacy: 8
-prior_concerns_addressed: Yes
+advocacy: 9
+prior_concerns_addressed: all
 ---
 
-Round-2 re-check of my four round-1 blockers — pasted a real launch-week agenda with a
-heading line, `9am`/`8pm`-style times, a `@ 18:00 UTC` line, and a junk line, then opened the
-share link in a Tokyo context.
+# Round 2 — Tester 2 (Marcus, frontend eng 2yr, desktop Chrome + devtools)
 
-**All four round-1 blockers FIXED:**
-- `Closing party — 8pm PT` now parses → "8:00 PM PT", localizes correctly to 12:00 PM +1 day
-  JST. The single most common time format finally works.
-- `Community Demo Day @ 18:00 UTC` → title is now clean "Community Demo Day", no trailing `@`.
-- `Launch Week 2026` heading no longer false-flagged as a session needing a time — it renders
-  as a muted italic header line. Correct.
-- **The big one: parse-failure cards NO LONGER LEAK into the shared/attendee view.** "broken
-  line no time here" shows as a quiet gray italic note (author view AND Tokyo viewer), not a
-  scary yellow "Couldn't read a time" card. This was the thing that stopped me hitting send in
-  Discord, and it's done. Viewer header is clean: "Agenda / Source timezone / Times shown in
-  your timezone." Zero console errors in author or viewer, clean on 375px mobile too.
+In-audience: YES (drops one link in a Discord for a public 'launch week' livestream series; every viewer should see local time). Round 1 advocacy: 4.
 
-**CSS polish:** genuinely good. Consistent card spacing, clear type hierarchy, the blue
-"(your time)" + original-zone subtitle + orange "+1 day" badge is exactly the right info
-density. Per-session "Add to Google Calendar" / "Download .ics" still present on the shared
-view — that's the feature that makes me actually drop the link in Discord. Nothing janky.
+## Round-1 P0 re-check: FIXED — verified in cards, shared view, AND .ics
+Pasted out-of-order agenda with embedded header "Launch Week Summit 2026 — All times PT":
+- "10:00 AM PT Opening Keynote" → card title "Opening Keynote" (NO "PT"). ✓
+- .ics line `SUMMARY:Opening Keynote` (NOT "PT Opening Keynote"). ✓  <-- the exact thing that burned me last round
+- "PT Roadmap — Q3" correctly KEPT as "PT Roadmap — Q3". ✓
+- Detected source tz "PT — from 'Launch Week Summit 2026 — All times PT'" (embedded form). Override snapped to PT, your-tz banner + per-card original-time reference all AGREE. ZERO "UTC" lie. ✓
+- Out-of-order input auto-sorted; no-time rows greyed "no time — not exported" and excluded from .ics. ✓
 
-**NEW issue that keeps me at 8, not 9:** the parser eats the LAST WORD of a title before the
-time. I pasted `Live Coding: Build with our SDK 11:30am PT` and the card title rendered as
-"Live Coding: Build with our" — "SDK" vanished. Reproduced cleanly: `Panel on DX 2pm PT` →
-"Panel on", `A talk that ends in API 3pm PT` → "A talk that ends in". It's swallowing the
-trailing title word into the time token. For me that's not cosmetic — half my livestream
-titles end in a product noun (SDK, API, CLI) and they'd silently lose it in front of my whole
-team. That's a "looks broken" moment, same category as last round's warning leak.
+## Trailing-word check (a prior round-2 note flagged titles losing their last word): FIXED
+- "Live Coding: Build with our SDK 11:30am PT" → "Live Coding: Build with our SDK" (SDK kept). ✓
+- "Panel on DX 2pm PT" → "Panel on DX". ✓   "A talk that ends in API 3pm PT" → "A talk that ends in API". ✓
 
-**Single change to get me to 9:** stop dropping the last title word before the time. Fix that
-and this is a tool I bring up unprompted in our team Slack.
+## Shared/attendee view (opened share link as Asia/Tokyo viewer)
+- "Source timezone: PT" + "Times shown in your timezone: Asia/Tokyo". No literal "UTC" on page. ✓
+- 10:00 AM PT → "2:00 AM (your time) +1 day" — correct math; the "+1 day" badge is a classy touch. Source tz + times travel inside the link hash, nothing uploaded. ✓
+- .ics DTSTART UTC correct (17:00Z/18:30Z/21:00Z for 10AM/11:30AM/2PM PT). ✓
+
+## Mobile 375px (New York viewer)
+- No horizontal overflow, zero console errors. Smart "PREVIEW (3 SESSIONS) / See all / +1 more" stacked layout. 10AM PT → 1PM ET correct. ✓
+- Nitpick (the one thing): card titles TRUNCATE on narrow cards ("Workshop: Build...") with no tooltip/expand — for a PUBLIC shared schedule that's the lone bit of jank I still notice.
+
+## Answers
+1. USE + ADVOCATE? Yes to both. The two things that made me distrust the parser last round (garbled titles, UTC lie) are gone, and the provenance line + original-time reference + "+1 day" badge are exactly the polish that makes me trust it enough to post publicly.
+2. Advocacy: 9
+3. ONE thing stopping a 10: mobile card-title truncation with no expand on the public shared view. Fix that and I post it in team Slack unprompted.
+
+Clarity: Y. Value: Y (today I hand-write "10am PT / 1pm ET / 6pm UTC" and still get DMs asking "what's that my time"; this kills it).
+Round-1 P0 (title token-collision): FIXED.
 
 ```json
-{"tester": 2, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 8, "topComplaints": ["Parser drops the LAST word of a title before the time: 'Build with our SDK 11:30am' -> title 'Build with our' (SDK lost); reproduced with DX/API too", "Otherwise no blockers remain"], "priorConcernsAddressed": "all"}
+{"tester": 2, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["mobile card titles truncate ('Workshop: Build...') with no expand/tooltip on the public shared view"], "priorConcernsAddressed": "all"}
 ```

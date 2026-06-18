@@ -1,83 +1,55 @@
-# Panel SYNTHESIS — Round 4 (run 20260617-205623-daily)
+# Panel SYNTHESIS — Round 4 (DEEPEN: trust-the-parse — delta re-test of mobile detection-indicator fix)
 
-App: agenda-localizer (local prod build, http://localhost:3022)
-Feature under test: one-click "Download all sessions (.ics)" combined add-to-calendar button
-on creator preview AND shared attendee view (desktop + mobile). Downloads ONE .ics with every
-parsed session as a VEVENT. Per-session links retained.
+App: agenda-localizer · URL tested: http://localhost:3000 (local prod build)
+Round goal: confirm the ONE PASS-completing fix from R3 — the "Detected source timezone: X — from '…'" indicator (the visible proof of source-tz auto-detect) is now rendered on MOBILE too (below 1024px), in both the creator preview (compact block above the cards) and the shared/attendee view header. Previously `hidden lg:flex` (invisible below 1024px), which was Dana's lone R3 blocker (9→8). Desktop placement unchanged. Single isolated mobile CSS/markup fix.
 
-## Per-tester results
+(Supersedes a prior round-4 synthesis from the separate combined-.ics DEEPEN run; this is the trust-the-parse arc.)
 
-| # | Persona | Role | Audience | Clarity (5s) | New feature discovered cold? | Value of bulk download | Advocacy |
-|---|---------|------|----------|--------------|------------------------------|------------------------|----------|
-| 1 | Priya | Senior backend eng | IN | Yes | YES (under tz banner, all views) | Valued; network tab clean | 8 |
-| 2 | Marcus | Frontend eng | IN | Yes | YES (big blue button, top) | Valued, beats per-session | 5 |
-| 3 | Wen | Marketing data analyst | IN | Yes | YES (blue bar atop preview) | Valued but won't trust w/ wrong date | 4 |
-| 4 | Tomás | Ops analyst | IN | Yes | YES (top, "imports into GCal/Apple/Outlook") | Valued; capped by thin payload | 8 |
-| 5 | Dana | Demand-gen marketer | IN | Yes | YES (above first session, mobile too) | High — would screenshot to team | 9 |
-| 6 | Jules | Community marketer | IN | Yes | YES (desktop + mobile) | Valued for weekly schedule | 7 |
-| 7 | Aisha | Product designer | IN | Yes | YES (full-width, top; feels crafted) | Valued; craft is considered | 8 |
-| 8 | Rob | Freelance brand designer | borderline (carried) | Yes | YES (first/biggest element) | Could push past "do it by hand" if dates right | 5 |
-| 9 | Elena | Eng manager | IN | Yes (mobile) | YES (~3s on mobile) | Valued for sprint ceremonies | 5 |
-| 10 | Sam | Product manager | IN | Yes | YES (above fold, mobile) | High — his kind of artifact | 6 |
+## Audience-weighted bar
+IN-AUDIENCE (9): Priya, Marcus, Wen, Tomás, Dana, Jules, Aisha, Elena, Sam.
+NON-FIT carried (does not gate): Rob (round-1 floor adv 7, out of audience).
+PASS = every in-audience persona advocates at adv≥9.
 
-In-audience personas: 1,2,3,4,5,6,7,9,10 (9). Carried/borderline non-fit: 8 (Rob, low-frequency).
-In-audience advocating at 9+: 1 (Dana). 
+DELTA-RETEST SCOPE: mobile-only additive fix. Re-tested Dana (the R3 blocker, 375px phone) + Elena (mobile sentinel, confirms the added banner didn't break mobile layout for another mobile-sensitive in-audience persona). Carried the 7 in-audience passers at ≥9 whose surfaces a mobile-only additive fix cannot touch.
 
-## Headline finding on the new feature
+## Per-tester table
+| Name  | In-audience? | R3 → R4 | Clarity | Value | The one blocking thing (R4) |
+|-------|--------------|---------|---------|-------|------------------------------|
+| Priya | yes | carried 9 | Y | Y | Override is closed preset list, no arbitrary IANA (carried, orthogonal, mobile fix can't touch) |
+| Marcus| yes | carried 9 | Y | Y | No-tag rows show inherited source "PT" (carried, mildly pedantic) |
+| Wen   | yes | carried 9 | Y | Y | Real-tz word adjacent to time silently stripped from title w/ no notice (carried, caps at 9) |
+| Tomás | yes | carried 9 | Y | Y | No structured Excel/TSV paste (carried, out-of-scope) |
+| Dana  | yes | **8 → 9** | Y | Y | NONE blocking 9. Detection indicator NOW visible & legible on 375px phone in BOTH creator + attendee views — former blocker CLOSED. Below-10 nits only: opaque hash share-link, wants "Copy as table" confidence. NO regression: 10:00 AM PT→1:00 AM+1 Singapore w/ "+1 day" pill; .ics 170000Z all 3 VEVENTs; dateless disabled. |
+| Jules | yes | carried 10 | Y | Y | (carried — at 10) |
+| Aisha | yes | carried 9 | Y | Y | Line-1 heading parsed as no-time row (carried, polish; fixing earns 10) |
+| Elena | yes | **carried/held 9** | Y | Y | NO REGRESSION from added banner. New banner full-width, legible, wraps cleanly, 0 horizontal overflow at 375px (scrollWidth==375 both views), 0 console errors, both creator+shared. Neutral-to-helpful. Below-10: trust-confirmation, not yet a "wow". |
+| Sam   | yes | carried 10 | Y | Y | (carried — at 10) |
+| Rob   | NON-FIT | carried 7 | — | — | Out of audience, does not gate |
 
-DISCOVERABILITY: UNAMBIGUOUS PASS. All 10 testers found "Download all sessions (.ics)" COLD
-without hunting — it renders full-width as the FIRST/biggest element at the top of the localized
-preview, under the timezone banner, above every session card, on creator + attendee + mobile
-views. The "added-feature-buried" concern is fully resolved. Craft is good (Aisha: "considered,
-not bolted-on"; complements rather than competes with the quiet per-session row links). The
-attendee-view subtitle "Imports into Google Calendar, Apple Calendar & Outlook" pre-answered the
-"will this work in my calendar?" question for multiple testers.
+## In-audience-at-9 count: 9/9
+At adv≥9: Priya (9c), Marcus (9c), Wen (9c), Tomás (9c), Dana (**9**, up from 8), Jules (10c), Aisha (9c), Elena (**9**, held — no regression), Sam (10c).
+BELOW bar: none. Clarity 9/9 Y · Value 9/9 Y. **BAR MET.**
 
-VALUE: The bulk one-click action is broadly valued over per-session clicking by every in-audience
-persona. NO REGRESSION: localization (incl. +1-day badges), per-session Google-Calendar/.ics
-links, and hash-state share URL all verified intact across testers; zero console errors. The
-combined .ics is structurally valid (correct VEVENT count, correct TZ→UTC time-of-day math,
-byte-identical creator vs attendee download — verified by Wen/Tomás/Dana).
+## Fix confirmation (mobile detection-indicator)
+CONFIRMED FIXED. The R3 PASS lever (defect #1, Dana's lone blocker) is closed:
+- Dana (375px phone): detection indicator now visible & legible in BOTH the creator preview (`Detected source timezone: PT — from "Summit 2026 — All times PT"`, wraps cleanly, no clipping/overlap) AND the attendee/shared view (same indicator + "Times shown in your timezone: Asia/Singapore"). Exact trust-proof she screenshots for her team is back on mobile. 8 → 9.
+- Elena (mobile sentinel): added banner caused NO regression — full-width, legible, two-line wrap, no crowding of cards, 0 horizontal overflow at 375px, 0 console errors, shared view still instantly legible in her 30-second test. Held at 9.
 
-So why did advocacy CRATER vs round 3's 9/10? A single shared defect, not the feature's design.
+## Regression check (mobile-only additive fix)
+NO REGRESSIONS. Both mobile testers confirmed data correctness holds: times convert correctly (Dana cross-midnight APAC "+1 day" pill; Elena 10:00 AM PT→17:00Z, 2:00 PM PT→21:00Z), .ics exports correct, dateless sessions correctly disabled/excluded, desktop unbroken.
 
-## P0 — DATE PARSING corrupts the export (named by 6 testers: Wen, Rob, Elena, Sam, + Priya/Jules/Marcus as P1)
+## Grouped defects (R4)
 
-The combined .ics (AND per-session links) silently stamps the WRONG calendar DAY. When the
-agenda uses anything other than a standalone ISO date line (`2026-06-23`):
-- a separate ISO header date is parsed but NOT applied to events (Wen: header 2026-07-15 → events default to ~today, off by a month);
-- natural-language dates ("Mon June 23", "June 20", "2026-06-22 11:00 AM ET" inline) are NOT parsed — every DTSTART defaults to TODAY/tomorrow (e.g. 20260618);
-- the unparsed date string then LEAKS into the event SUMMARY/title (e.g. "Sprint Planning Mon June 23,").
+### FEATURE defects (fixable — none blocking; all carried below the bar)
+1. **Real-tz word adjacent to time silently stripped from title w/ no notice** — Wen (caps at 9, not blocking). Show a visible "moved PT to source tz" notice. (carried from R3 #2)
+2. **Line-1 heading parsed as a no-time session row** — Aisha (still 9). Treat line-1 as a heading. Fixing earns her a 10. (carried from R3 #3)
+3. **Mobile renders the session preview twice** — Sam + Jules (both at 10). Cosmetic. (carried from R3 #4)
+4. **Opaque hash share-link / "Copy as table" paste confidence** — Dana (at 9, below-10 nits only). Not blocking.
 
-Times-of-day and timezone conversions are correct; it is the DAY that is wrong. Because the
-on-screen preview looks fine, the broken export is completely SILENT — the user shares/imports a
-calendar that lands on the wrong date. This is the exact "tool silently mangles data" trigger that
-churns the data-hygiene and low-frequency skeptics (Wen 4, Rob 5, Elena 5, Sam 6, Marcus 5). The
-"messy agenda" promise is not honored in the .ics.
+### Out-of-scope / enhancement (PARK — do not gate)
+5. **Structured Excel/TSV paste** — Tomás (carried 9).
+6. **Arbitrary IANA entry in override** — Priya (carried 9).
+7. **No-tag rows show inherited source "PT"** — Marcus (carried 9, technically correct).
 
-## P1
-
-- No date INPUT field and NO warning telling the user what date the export will use, so the misparse is undetectable (Sam, Rob, Elena). Session cards show no date.
-- VEVENTs lack DESCRIPTION/LOCATION and use a hardcoded 60-min duration — no room for the meeting/Teams link, and wrong block length for 90-min keynotes (Tomás, Dana). Caps the time-save.
-- Helper caption "Imports into Google Calendar, Apple Calendar & Outlook" appears in the attendee view but is MISSING in the editor/creator view (Aisha) — inconsistent.
-
-## P2 / backlog (NOT to chase this round)
-
-- Title punctuation normalized in .ics SUMMARY (hyphens/commas stripped: "Privacy-First"→"Privacy First").
-- "Copy as table" Source-timezone column reports UTC for every row despite explicit inline tz (label lie; times still correct) — Wen.
-- Combined .ics filename is date-only, not the track/agenda name (Aisha).
-- Session titles truncate on 375px mobile cards (Jules).
-- A title-only first line with no time/date is silently dropped on paste (Aisha, Marcus).
-
-## ROUND VERDICT: FIX
-
-Audience-weighted bar NOT met: only 1 of 9 in-audience personas advocates at 9+. This is NOT a
-structural ceiling (so not a PARK) and NOT a flaw in the new feature's DESIGN — discoverability,
-placement, craft, and the core bulk-download concept all PASS. The advocacy collapse traces to a
-SINGLE crisp, fixable P0: the date-parsing/anchoring bug that makes the combined .ics import on the
-wrong day for natural-language / header dates. Multiple in-audience testers explicitly stated they'd
-jump to 9 once dates are correct (Sam: "9 if the date bug were fixed"; Wen/Rob/Elena gated solely on
-it). Recommend ONE builder fix loop: (1) parse natural-language + header dates and APPLY them to
-every VEVENT DTSTART; (2) stop leaking the date string into the SUMMARY; (3) add a visible date
-indicator/warning so a misparse is never silent. P1 payload (DESCRIPTION/LOCATION/duration) and the
-editor-view caption are worth folding in. Re-run a panel round after the fix.
+## Verdict
+**PASS.** All 9 in-audience personas at adv≥9 (9/9 in-audience-at-9). The single PASS-completing R3 fix (mobile detection-indicator) is CONFIRMED: Dana 8→9 (blocker closed), Elena held at 9 with NO mobile-layout regression. Clarity 9/9, Value 9/9, zero parser/data regressions. All remaining defects are below-the-bar polish (Wen/Aisha/Sam/Jules/Dana nits) or parked enhancements (Tomás/Priya/Marcus) — none gate. Bundle defects #1–#3 opportunistically to lift Wen/Aisha to 10, but the bar is MET.

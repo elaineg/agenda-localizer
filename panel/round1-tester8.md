@@ -1,50 +1,21 @@
----
-tester: 8
-name: Rob
-clarity: Yes
-value: Marginal
-advocacy: 6
----
+NAME: Rob | IN-AUDIENCE: borderline/non-fit (low-frequency, occasional client calls) | ADVOCACY: 7 | CLARITY: Y | VALUE: Y | BLOCKER: Two stale "UTC" labels (override selector default + attendee "Source timezone: UTC") contradict the correct "PT" rows and dent trust.
 
-I'm Rob — freelance brand designer. I live in Figma/Photoshop and only occasionally schedule
-a couple client review calls and the odd creator-community workshop across timezones. My
-honest baseline: "I could just type the times out myself in 4 minutes," and I'm cheap.
+WHAT I TESTED (desktop 1280 + mobile 375, real paste):
+Agenda: "All times PT" header / date / out-of-order sessions / a "PT Roadmap — Q3" title / a no-time row "Coffee chat (whenever)".
+- Detection: "Detected source timezone: PT — from 'All times PT'" — correct. Did NOT mistake the "PT" inside the "PT Roadmap" title for a timezone. Nice.
+- Out-of-order: auto-sorted (Kickoff 9AM before Roadmap 10AM). Good.
+- No-time row: shows "no time — not exported" and is excluded from the .ics — clearly flagged, exactly right.
+- Override selector: switching source to JST re-localized live (9AM JST -> 2AM Berlin) and updated source labels. Works.
+- Combined .ics: 3 VEVENTs (no-time row correctly dropped), titles intact incl. "PT Roadmap — Q3", filename all-times.ics. This is the part I can't do by hand.
+- Attendee view (share link opened as ET): editor hidden, 9AM PT -> 12PM ET correct, agenda rides in URL fragment (truly no upload/login).
+- Mobile 375: clean, stacks well, no overflow.
 
-**Clarity — Yes.** Cold load, ~5s, I got it. The headline "Your agenda, in everyone's
-timezone." plus the subline "Paste your sessions, share one link — each person sees their
-own local time" told me exactly what it is and who it's for. The pre-filled sample with a
-live localized preview on the right sealed it — I didn't have to guess. No confusion.
+CLARITY: Y. H1 + "share one link — each person sees their own local time" told me what it is in ~10s.
 
-**Value — Marginal (leaning useful, but low frequency for me).** I pasted my real mixed
-schedule: "Acme rebrand — 10:00 AM PT", "Bluebird packaging — 2:00 PM ET", "workshop —
-18:00 UTC". It correctly parsed the inline zone on each line (didn't force one source tz)
-and converted all three into my LA local time, with the original time kept underneath as a
-sanity check. That's genuinely the fiddly part I'd otherwise do by hand or in a converter
-tab, and it caught it per-line, which impressed me. The killer feature is the share link:
-my client opens it and sees THEIR local time, no math, no "wait, is that my 2pm?" — that's
-the value over me typing out a table.
+VALUE: Y but marginal-for-ME. Today I hand-type "10am PT / 1pm ET / 7pm CET" into Slack (~90s). This is faster AND gives .ics files hand-typing can't. But I run this 1-2x/month, so it's "nice when I remember it" not a daily.
 
-But: I do this maybe twice a month. For a single call I'd still just type "2pm ET / 11am
-PT" in Slack — faster than opening a tab. The win only shows up for the multi-session
-workshop with an audience in several zones. So real but occasional.
-
-**Advocacy — 6.** I'd mention it to a peer who runs community events, not unprompted to
-everyone. What holds it back from an 8+:
-1. **No add-to-calendar / .ics.** I checked — there's no "Add to calendar" anywhere. For a
-   review CALL, the thing people actually want is it landing in their calendar at the right
-   time. Without that, my client still has to manually create the event. This is the gap.
-2. The share link is a giant `#eyJ...` base64 hash. It works, but pasting that monster into
-   a client email looks sketchy/unprofessional — I'd worry a client thinks it's spam.
-3. Colons in titles get stripped: "Client review: Acme" rendered as "Client review Acme".
-   Cosmetic, but I noticed.
-
-No console errors. Copy verified visually (button flipped to "✓ Copied!"); clipboard read
-also returned the URL fine in my run. Shared link round-tripped and showed all sessions.
-
-**Highest-impact change:** add an "Add to calendar" (.ics + Google Calendar) button per
-session on the shared view. That turns it from a pretty read-only table into something my
-clients actually act on, and it's the one thing that beats me typing times by hand.
+WHY 7 (not higher): the two "UTC" labels. The override box defaults to "UTC" even though it DETECTED PT, and the shared attendee header literally reads "Source timezone: UTC" while every row says PT. Math is correct, but as the attendee I'd squint at "UTC" and wonder if the times are wrong. Make the override box reflect the detected zone and have the attendee header echo the detected source (PT), and this is a confident 8-9 for me.
 
 ```json
-{"tester": 8, "round": 1, "clarity": "Yes", "value": "Marginal", "advocacy": 6, "topComplaints": ["No add-to-calendar / .ics export — biggest gap for review calls", "Share link is an ugly long base64 #hash, looks unprofessional in a client email", "Colons in session titles get stripped (cosmetic)"], "priorConcernsAddressed": "n/a"}
+{"tester": 8, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 7, "topComplaints": ["Attendee header reads 'Source timezone: UTC' while session rows correctly say PT — trust wobble", "Override-source selector defaults to 'UTC' despite detecting PT; should mirror the detected zone"], "priorConcernsAddressed": "n/a"}
 ```

@@ -1,56 +1,28 @@
----
-tester: 3
-name: Wen
-clarity: Yes
-value: Marginal
-advocacy: 6
----
+NAME: Wen | IN-AUDIENCE: yes (coordinates recurring global webinar series) | ADVOCACY: 6 | CLARITY: Y | VALUE: Y | BLOCKER: Attendee "Source timezone" header states UTC/override value while times are computed from the detected PT source — header contradicts the math.
 
-# Wen — Marketing data analyst, coordinates a recurring global webinar series
+## Re-check of my prior complaints (now addressed?)
+- Silent date rollover (my old P0): FIXED. "8:59 AM (your time) +1 day" badge now appears; "+1 day" shows across creator + attendee views. This was my blocker — good fix.
+- No CSV/table export: ADDRESSED — there's now a "Copy as table" button. Acceptable for me.
+- (Literal PST off-by-one I didn't re-test this round; the rollover fix was the big one.)
 
-## Clarity — Yes
-The H1 "Your agenda, in everyone's timezone." plus the subhead "Paste your sessions, share
-one link — each person sees their own local time" told me the job in ~5s. The two-pane
-layout (paste left, "Localized preview" right) with "Times shown in your timezone:
-America/Los_Angeles" is exactly the legibility I want. I'd tell a peer: "paste your session
-list, pick the source TZ, send the link; each attendee opens it in their own time."
+## Clarity — Y
+Cold, in 30s: "Your agenda, in everyone's timezone" + "each person sees their own local time." Unambiguous. The banner "Detected source timezone: PT — from 'All times PT'" names the EVIDENCE line — exactly what earns a skeptic's trust. Clean at desktop and 375px.
 
-## Value — Marginal
-Today I hand-build a Google Sheet with a UTC column and TZ formulas, or eyeball
-worldtimebuddy. This is faster to *share* (one link, per-viewer localization, per-session
-"Add to Google Calendar / Download .ics" — that part is genuinely nice). BUT it does not
-beat my sheet on the thing I actually pay the sheet for: **trustworthy, auditable
-conversions and CSV out.** No CSV/table export anywhere — I can paste text in but can't get
-structured data back out. Dealbreaker-adjacent for my workflow.
+## Value — Y
+Today I hand-build a TZ table in Sheets + paste per-region times into the Slack invite every webinar. This: one paste → share link + combined .ics. Real recurring time saved.
 
-## What I verified by hand (I distrust invisible transforms)
-- 14:00 UTC → LA 7:00 AM ✓, → Tokyo 11:00 PM ✓. 15:30 CET → LA 7:30 AM ✓. Core UTC math is right.
-- Share link is a base64 JSON fragment carrying raw text + source TZ; conversion is
-  client-side (no server mangling — I like that), and it decodes to exactly what I typed. Good.
+## Verified by hand (the reason I'd consider trusting it)
+- 10AM PT→1PM ET ✓, 1:30PM PT→4:30PM ET ✓, 4PM PT→7PM ET ✓.
+- .ics DTSTART UTC 170000Z/203000Z/230000Z all correct; 3 VEVENTs; no-time row EXCLUDED ✓. Honest export.
+- "Fireside Chat — sometime after lunch" shown in place, italic, "no time — not exported." Exactly what I need.
+- Out-of-order input silently re-sorted to chronological (fine; worth a note).
 
-## Bugs / frictions (concrete)
-1. **Silent date rollover.** "Closing — 23:59 UTC" shows a Tokyo viewer "8:59 AM" sitting
-   under the "2026-03-10" header — but it's actually **March 11**. No "+1 day" badge. This
-   is the precise silent mangle I came to catch. Same risk on any cross-midnight session.
-2. **"11:00 AM PST" off by an hour.** On 2026-03-10 (LA is on PDT/UTC-7) a literal PST
-   (UTC-8) at 11:00 AM should render 12:00 PM in LA; app shows 11:00 AM. It treats inline
-   "PST" as the viewer's wall zone instead of the fixed -8 offset. Subtle and wrong.
-3. **Bare "12:00" silently assumed noon + source TZ.** No AM/PM, no flag for ambiguity.
-4. **No CSV/table export.** Per-session .ics only; no bulk CSV out for a data person.
-5. Good: "25:00 UTC" and timeless lines ARE flagged ("Couldn't read a time…"), and the
-   "1 line needs a time" counter is honest about what didn't parse. That earns trust.
+## The blocker (why 6, not 9)
+The shared/attendee "Source timezone:" header is decoupled from the math. A default share link encodes sourceTimezone=UTC; attendee header reads "Source timezone: UTC" — but times are PT-derived (10AM PT → 10:30 PM IST is the PT math, not UTC's 3:30 PM). And touching "Override source timezone" to inspect LEAKS into the share link: header then says "Asia/Tokyo" while rows still read "10:00 AM PT" and use PT math. Any attendee who sanity-checks the stated source against the clock concludes the tool mangled the time — even though the calendar entry is right. For a tool that promises "see exactly what got parsed," a header that lies about the source is disqualifying.
 
-## Advocacy — 6
-The flagging of unparsed lines and visible source+local times build real trust, and sharing
-is slick. But I caught a silent +1-day shift and a PST off-by-one on my FIRST serious test —
-exactly the failure mode my whole job is to prevent. I can't recommend a time tool to peers
-when I can't trust the edge dates, and I can't get my data back out as CSV. Fix the
-rollover and I'm at 8.
-
-**Single change to raise advocacy most:** show a "+1 day" / date badge on any session whose
-local time crosses to a different calendar day than the agenda header (and fix literal
-PST/PDT offset handling). Date-silent conversions are the one thing that kills trust.
+## Single change to raise advocacy most
+Make the header always state the timezone the conversion ACTUALLY used, and default the share link to the DETECTED source (not UTC). Don't let a temporary override leak into the copied link. Fix that and I'm at 9.
 
 ```json
-{"tester": 3, "round": 1, "clarity": "Yes", "value": "Marginal", "advocacy": 6, "topComplaints": ["Silent date rollover: 23:59 UTC shows as 8:59 AM under the same date header for a Tokyo viewer with no +1-day badge", "Literal 'PST' at 11:00 AM renders 11:00 AM (not 12:00 PM) for a DST-period LA viewer — fixed offset not honored", "No CSV/table export for a data analyst who wants data back out"], "priorConcernsAddressed": "n/a"}
+{"tester": 3, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 6, "topComplaints": ["Attendee 'Source timezone' header shows UTC/override value while times are computed from detected PT — header contradicts the conversions", "Override source-tz selection silently leaks into the copied share link; default share encodes UTC not the detected source"], "priorConcernsAddressed": "some"}
 ```

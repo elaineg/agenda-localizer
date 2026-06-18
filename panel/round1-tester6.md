@@ -1,55 +1,21 @@
----
-tester: 6
-name: Jules
-clarity: Yes
-value: Marginal
-advocacy: 6
----
+NAME: Jules | IN-AUDIENCE: yes (posts weekly community office-hours schedule) | ADVOCACY: 9 | CLARITY: Y | VALUE: Y | BLOCKER: "Override source timezone" defaults to UTC even after it correctly auto-detects PT — control contradicts the (correct) preview and reads as broken for a moment.
 
-I'm Jules — I run a weekly community office-hours/AMA series for a globally distributed
-Discord. Posting "what time is this for YOU" across timezones is exactly the by-hand job I
-do every week. So I came in primed to love this.
+CLARITY (Y): Headline "Your agenda, in everyone's timezone." + sub "share one link — each person sees their own local time" told me the whole job in <10s. This is LITERALLY the by-hand thing I do every week for my distributed Discord office hours.
 
-**Clarity — Yes.** Headline "Your agenda, in everyone's timezone." + subhead "Paste your
-sessions, share one link — each person sees their own local time" told me the whole pitch in
-under 5 seconds. The prefilled sample + live localized preview on the right meant I never
-wondered what to do. This nails my mental model: one link everyone reads in their own time.
+WHAT I TRIED (real agenda, all the traps):
+- "All times PT" stated once -> "Detected source timezone: PT — from 'All times PT'". Correct, and it shows me WHY.
+- "PT Roadmap — Q3" did NOT get eaten as a timezone — parsed as a session title. The exact gotcha I worried about. Passed.
+- "Discord vibe check — whenever folks show up" (no parseable time) -> greyed "no time — not exported". Honest, not silently dropped.
+- Out-of-order rows got sorted to 9:00 / 11:00 / 12:30.
+- Combined "Download all sessions (.ics)" = 3 valid VEVENTs, sensible filename, no-time rows excluded. Imports into Google/Apple/Outlook.
+- Override to JST -> times shifted AND showed "+1 day / -1 day" date-roll badges. That badge is gold for a global audience.
+- Share link = the agenda encoded in the URL hash, nothing uploaded, NO LOGIN. Opened it in a Tokyo browser: read-only attendee view, localized to "1:00 AM +1 day", combined .ics still present. This is the product.
+- Mobile 375px: clean single column, full-width tappable buttons, nothing clipped (I'm 50/50 mobile, so this mattered).
 
-**Value — Marginal.** What I love and what it gets right:
-- NO LOGIN. The share link is a self-contained URL hash — I can drop it in Discord and
-  every member just opens it. This is the single biggest reason I'd consider it.
-- I opened my own share link as a Tokyo member (timezone Asia/Tokyo) and the times
-  converted correctly (18:30 ET → 7:30 AM JST). Conversion is accurate.
-- The shared/recipient view has "Add to Google Calendar" + "Download .ics" per session.
-  That's genuinely great for my members.
-- Copy button works (label flips to "✓ Copied!"). Mobile at 375px is clean, single column,
-  no horizontal scroll, no mobile bugs found.
+VALUE (Y): Today I hand-type "9am PT / 5pm London / 1am Tokyo..." into Notion + a pinned Discord post and still get DMs asking "what's that in my time?". One link people read in their own time replaces all of it. Big save.
 
-Why only Marginal: **the parser rejects the way real people write times.** I pasted my
-actual schedule and most lines failed. Tested 6 common formats:
-- "6:30pm ET" → works.  "10:00 ET" → works.
-- "6pm ET" → FAILS.  "7 PM ET" → FAILS.  "9am ET" → FAILS.  "11 p.m. ET" → FAILS.
-
-It seems to require HH:MM. But nobody in my Discord writes "7:00 PM" — they write "7pm".
-Every bare-hour time gets a yellow "Couldn't read a time" box. So to actually use this I'd
-have to rewrite every line adding ":00", which is exactly the re-entry tax that makes me
-just keep doing it by hand in Notion. Today I hand-write a few timezone conversions in the
-pinned Discord message; this would only beat that if I can paste my message AS-IS.
-
-Minor: I selected "ET" as source timezone but my lines already had "ET" inline and it still
-worked — fine, but the relationship between the source-tz dropdown and inline "ET/PT" tags
-isn't explained. Also the Add-to-Calendar buttons only appear on the shared view, not in my
-editor preview, so I didn't know they existed until I opened my own link.
-
-**Advocacy — 6.** It's close. The concept, the no-login link, and accurate conversion are
-all 9/10. But I can't recommend "paste your schedule" to my community when half my pasted
-lines bounce. A 6 because I'd hesitate to post it, fearing friends paste real text and hit a
-wall of yellow warnings.
-
-**Highest-impact change:** make the parser accept bare-hour am/pm — "6pm", "7 PM", "9am",
-"11 p.m." — not just HH:MM. That one fix turns this from Marginal to a Yes I'd post in
-Discord unprompted.
+WHY 9 NOT 10: The override dropdown reads "UTC" by default even though it auto-detected PT correctly — for a few seconds I thought my times were wrong. Detected source should pre-select the dropdown so the control matches the preview. Also the "No date found" warning repeats on every card; I'd love a single date setter or a "this week" inference.
 
 ```json
-{"tester": 6, "round": 1, "clarity": "Yes", "value": "Marginal", "advocacy": 6, "topComplaints": ["Parser rejects bare-hour times like '6pm','7 PM','9am' — only HH:MM works, so real pasted schedules mostly fail", "Add-to-Calendar/.ics only shows on the shared view, not the editor preview, so I didn't know it existed", "Source-timezone dropdown vs inline ET/PT tags relationship unexplained"], "priorConcernsAddressed": "n/a"}
+{"tester": 6, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["Override-source-timezone dropdown defaults to UTC despite correct PT auto-detection — control contradicts the preview and reads as broken for a moment", "No-date-header warning repeats on every session card; would prefer a single date setter or 'this week' inference"], "priorConcernsAddressed": "n/a"}
 ```

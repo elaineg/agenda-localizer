@@ -1,51 +1,18 @@
----
-tester: 9
-name: Elena
-clarity: Yes
-value: Yes
-advocacy: 8
----
+NAME: Elena | IN-AUDIENCE: yes (shares sprint/planning schedules across 3 tz) | ADVOCACY: 6 | CLARITY: Y | VALUE: Y | BLOCKER: Shared/attendee view header says "Source timezone: UTC" while every row correctly converts FROM PT — a self-contradicting trust-breaker for a tz-sensitive manager.
 
-I opened the link on my phone between two meetings, which is exactly how a shared planning
-link reaches me in real life.
+WHAT I DID (375px mobile — the way I actually open a shared link, between meetings):
+Pasted a real agenda: "All times PT" header, a "PT Roadmap — Q3" title, a "Coffee chat (whenever)" no-time row, and out-of-order sessions. Then opened the share link as a New York attendee.
 
-**Clarity — Yes.** Headline "Your agenda, in everyone's timezone." plus the subhead "Paste
-your sessions, share one link — each person sees their own local time." told me what this
-is in well under 5 seconds. A sample agenda was already loaded, so I didn't have to think.
-No signup wall, no "create account," no setup — which for me is the difference between
-using a tool and closing the tab.
+CLARITY — Y. Headline "Your agenda, in everyone's timezone" + "each person sees their own local time" told me what it does in ~5s. A sample is pre-loaded and the localized preview now sits ABOVE the fold on mobile, so I saw the payoff before doing anything. No login, no setup — rare enough that I noticed.
 
-**Value — Yes.** Today I solve this by typing "(9am PT / 12pm ET / 5pm UK)" by hand into a
-Google Doc or Slack message for every sprint ceremony across my 3-timezone team, and people
-STILL mess up the math or paste a stale converter link. This kills that. I tested the real
-flow: pasted sessions, hit "Copy share link," got a self-contained URL (data encoded in the
-hash — no backend, nothing to break), opened it as a recipient on mobile, and every session
-rendered in MY local time with the source time underneath. It even handled a mixed agenda
-(UTC, PT, ET on different lines) correctly and flagged the one line with no time instead of
-silently dropping it. The per-session "Add to Google Calendar" and "Download .ics" actually
-work — the GCal link carried the correct UTC datetime (verified 16:00Z), and the .ics is a
-valid VCALENDAR. That last bit is what saves my REPORTS time, not just me: they tap one
-button and it's on their calendar in the right slot.
+VALUE — Y. Today I hand-type "9am PT / 12pm ET / 6pm CET" into the Google Doc for every ceremony and redo it whenever the agenda shifts; reports still fat-finger the math. This auto-localizes per viewer + gives a combined "Download all sessions (.ics)". The hard cases worked: "PT Roadmap — Q3" was NOT mis-read as a timezone, "Coffee chat (whenever)" showed "no time — not exported" (honest, not dropped), out-of-order sorted itself, and my NY attendee correctly saw 9:00 AM PT → 12:00 PM their time. Conversions are right.
 
-**Advocacy — 8.** I'd bring this up in my next "tooling that doesn't suck" Slack thread.
-It's not a 9–10 because of two things that hit my exact use case:
+WHAT HOLDS IT BACK (the 6):
+- The attendee view's top line reads "Source timezone: UTC" while every row says "9:00 AM PT" and the math is PT-based. It contradicts itself. Getting timezones right IS my job; a report skimming that header could distrust the whole thing and double-check manually — which defeats the point. The same wrong "UTC" leaks into the creator's "Override source timezone" default even though it detected PT.
+- On mobile I never clearly saw the "Detected: PT" indicator that desktop surfaces — the detection confidence is buried.
 
-Frictions (mobile / speed):
-- On the EDITOR view at 375px, the localized preview sits entirely below the fold — I only
-  saw the input box and buttons. The sender doesn't get the "oh, magic" payoff until they
-  scroll. The preview is the proof; bury it and a hurried sender may not trust it before
-  sharing. (Recipient view, the one that actually gets shared, is fine — preview is up top.)
-- The whole agenda is encoded in the URL hash, so the share link is enormous. On mobile
-  Slack/iMessage that looks sketchy/spammy and there's no title preview. I'd hesitate to
-  paste a 600-char link into a channel without a word of context.
-- No timezone label on the SENDER's source dropdown caught me for a second ("times in your
-  agenda are in…") — fine once I read it, but my 30s budget noticed the pause.
-
-Single highest-impact change: on the editor, show a collapsed one-line localized preview
-(or the first session) ABOVE the fold on mobile, so the sender sees it works before they
-copy. Bonus: shorten/prettify the share link (or add a short title) so it doesn't look like
-spam when pasted into Slack.
+Make the source-timezone label match the detected PT everywhere (attendee header + override default + the encoded payload), and I'd push this to my whole team unprompted. Today I'd forward it to one peer with a caveat, not broadcast it — that's a 6.
 
 ```json
-{"tester": 9, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 8, "topComplaints": ["mobile editor preview is below the fold — sender doesn't see the proof before sharing", "share link is a giant URL-hash blob that looks spammy when pasted into Slack/iMessage"], "priorConcernsAddressed": "n/a"}
+{"tester": 9, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 6, "topComplaints": ["Attendee view header says 'Source timezone: UTC' while rows correctly convert from PT — self-contradicting, breaks trust for a tz-sensitive manager", "Override dropdown defaults to/labels UTC despite detecting PT; mobile never surfaces the 'Detected: PT' indicator desktop shows"], "priorConcernsAddressed": "n/a"}
 ```

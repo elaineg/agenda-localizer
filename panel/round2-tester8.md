@@ -1,52 +1,47 @@
----
-tester: 8
-name: Rob
-clarity: Yes
-value: Marginal
-advocacy: 8
-prior_concerns_addressed: Partly
----
+# Round 2 — Tester 8 (Elena, Eng Manager, 8 reports)
 
-I'm Rob — freelance brand designer, in Figma/Photoshop all day, scheduling client review
-calls and the odd creator-community workshop across timezones maybe twice a month. Baseline:
-"I could type the times out in Slack in 4 minutes." Re-tested cold on desktop.
+In-audience: YES. Round 1 advocacy: 6. Device judged: mobile (375px) primary + desktop cold.
 
-**Re-checking my three round-1 blockers:**
+## Round-1 blockers — re-checked first
+(a) Header "Source timezone: UTC" contradicting PT rows — **FIXED.** As a NY attendee on
+    mobile the header now reads literally "Source timezone: PT" + "Times shown in your
+    timezone: America/New_York". No "UTC" string anywhere in the viewer-facing UI. On the
+    creator side it shows "Detected source timezone: PT — from 'Summit 2026 — All times PT'".
+(b) Mobile never surfaced "Detected: PT" — **FIXED.** The detected banner shows on both the
+    creator's 375px composer and travels into the attendee share view as "Source timezone: PT".
 
-1. **No add-to-calendar / .ics — FIXED.** This was my highest-impact ask and it's done right.
-   Every session card now has "Add to Google Calendar" and "Download .ics". I downloaded the
-   Acme one: valid VCALENDAR, `DTSTART:20260613T170000Z` correctly = 10:00 AM PT,
-   `SUMMARY:Client review: Acme rebrand`, 1-hour default. This is the thing that turns it from
-   a read-only table into something my client actually clicks and lands in their calendar.
-   That's the change that beats me typing "2pm ET / 11am PT" by hand.
+## What I pasted (embedded header, PT-prefixed time, PT-titled session, no-time row, out of order)
+- "Summit 2026 — All times PT" (embedded) → detected PT, snapped override to PT. Correct.
+- "10:00 AM PT Opening Keynote" → title rendered "Opening Keynote" (PT stripped). Correct.
+- "PT Roadmap — Q3" → title kept "PT Roadmap — Q3" (PT preserved). Correct.
+- "Networking Lunch" (no time) → "no time — not exported", greyed, excluded from .ics. Honest.
+- 9:00 AM Standup pasted LAST → sorted to the top of the day. Out-of-order handled.
 
-2. **Colons stripped from titles — FIXED.** "Client review: Acme rebrand" and "Creator
-   workshop: timezone deep-dive" both render WITH the colon now, and the colon survives into
-   the .ics SUMMARY. Clean.
+## All tz indicators agree?
+YES. Creator header, detected banner, every row's "9:00 AM PT" anchor, and attendee header
+all say PT. As a NY viewer 9:00 AM PT correctly showed 12:00 PM (your time). No UTC lie.
 
-3. **Ugly base64 `#hash` share link — NOT fixed.** Copy link still hands me a 285-char
-   `https://…/#eyJ0ZXh0Ijoi…` monster. It works and round-trips, but I still wouldn't paste
-   that into a client email — it reads like phishing. A short URL or a "this stays in your
-   browser, here's a clean link" treatment would close this.
+## Share link + combined .ics
+Share link encodes the agenda + sourceTimezone + applied "PT" abbr — opened cold on a 375px
+phone in a different timezone and was instantly legible inside 5 seconds. "Download all
+sessions (.ics)" worked on mobile: 4 VEVENTs, no-time row excluded, DTSTART 16:00Z = 9AM PT.
+Correct.
 
-**Clarity — Yes.** Same strong cold open: "Your agenda, in everyone's timezone" + the live
-prefilled preview. Got it in 5 seconds.
+## Answers
+1. USE + ADVOCATE: Yes, I'd use it for cross-TZ sprint/ceremony schedules, and yes I'd send
+   it to my reports — the attendee link "just shows their own time" with the source TZ stated.
+2. Advocacy score: **9/10**
+3. The ONE thing stopping a 10: the override dropdown still lists a bare "UTC" entry first in
+   the list (it's just a selectable option, not the applied value, so it's not a lie — but on
+   a tiny phone composer it's the first thing under "Override source timezone" and made me
+   double-take for a second whether UTC was active. Auto-detect already nailed PT, so I never
+   needed the dropdown.) Minor; doesn't block recommendation.
 
-**Value — Marginal (real but low-frequency for ME).** The per-line zone parsing is right:
-Acme 10am PT and Bluebird 2pm ET correctly resolve to 10:00 and 11:00 in my LA time. The .ics
-export is what I wanted. For a single 1:1 call I'd still just type it in Slack — but for the
-multi-zone workshop, share link + per-session calendar buttons genuinely save me effort.
-Honestly occasional for me, but the tool earns its keep when I do use it.
-
-**Advocacy — 8.** Up from 6. The calendar export landed and colons are fixed — the two
-functional gaps are gone, so I'd now bring this up to peers who run community events without
-being asked. Not a 9/10 only because of the share-link cosmetics: that ugly hash is the one
-thing standing between "useful tool I mention" and "thing I'd confidently forward to a paying
-client." Fix the link presentation and this is a 9.
-
-Copy verified visually (button click fired, link returned in clipboard fine in my run).
-No console errors. .ics download is a `data:` anchor — opens correctly for a real click.
+clarity: Y
+value: Y
+header-contradiction fixed: YES
+mobile "Detected" indicator fixed: YES
 
 ```json
-{"tester": 8, "round": 2, "clarity": "Yes", "value": "Marginal", "advocacy": 8, "topComplaints": ["Share link is still an ugly 285-char base64 #hash — looks like phishing in a client email", "Low personal frequency (~2x/month) caps the value for me, though the tool is solid"], "priorConcernsAddressed": "some"}
+{"tester": 8, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["bare 'UTC' option sits first in override dropdown — momentary double-take on mobile though it's not the applied value"], "priorConcernsAddressed": "all"}
 ```

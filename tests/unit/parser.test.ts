@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   parseAgenda,
+  detectSourceTz,
+  tryParseStatedOnceTz,
   formatInZone,
   formatSourceDate,
   ianaFromAbbr,
@@ -14,6 +16,7 @@ import {
   type ParsedSession,
   type UnparsedLine,
   type NoteLine,
+  type NoteLineWithHint,
 } from "../../lib/parser";
 
 // Reference date: 2026-06-16 (a Tuesday in summer, PDT active, BST active)
@@ -1203,5 +1206,260 @@ describe("Fix: formatSourceDate — human-readable date label for session cards"
 
   it("returns empty string for empty string", () => {
     expect(formatSourceDate("")).toBe("");
+  });
+});
+
+// ── SOURCE-TZ AUTO-DETECT: stated-once header detection ───────────────────────
+
+describe("detectSourceTz: stated-once header detection", () => {
+  it("detects 'All times PT' stated-once header", () => {
+    const result = detectSourceTz("All times PT\n2026-06-16\nKeynote — 9:00 AM");
+    expect(result).not.toBeNull();
+    expect(result!.abbr).toBe("PT");
+    expect(result!.originType).toBe("stated-once");
+    expect(result!.origin).toBe("All times PT");
+    expect(result!.ianaZone).toBe("America/Los_Angeles");
+  });
+
+  it("detects 'all times in ET' (lowercase, with 'in')", () => {
+    const result = detectSourceTz("all times in ET\nKeynote");
+    expect(result?.abbr).toBe("ET");
+    expect(result?.originType).toBe("stated-once");
+  });
+
+  it("detects 'Times: PST'", () => {
+    const result = detectSourceTz("Times: PST\nKeynote — 9:00 AM");
+    expect(result?.abbr).toBe("PST");
+    expect(result?.originType).toBe("stated-once");
+  });
+
+  it("detects 'times are CET'", () => {
+    const result = detectSourceTz("times are CET\nKeynote — 2:00 PM");
+    expect(result?.abbr).toBe("CET");
+    expect(result?.originType).toBe("stated-once");
+  });
+
+  it("returns null when no tz stated", () => {
+    const result = detectSourceTz("2026-06-16\nKeynote — 9:00 AM PT");
+    // The inline PT should be found as inline type if no stated-once header
+    expect(result?.originType).toBe("inline");
+  });
+
+  it("stated-once header takes priority over inline", () => {
+    const result = detectSourceTz("All times PT\n2026-06-16\nKeynote — 9:00 AM ET");
+    // stated-once header is found first (first line)
+    expect(result!.originType).toBe("stated-once");
+    expect(result!.abbr).toBe("PT");
+  });
+});
+
+describe("tryParseStatedOnceTz: individual line detection", () => {
+  it("detects 'All times PT'", () => expect(tryParseStatedOnceTz("All times PT")).toBe("PT"));
+  it("detects 'all times in ET'", () => expect(tryParseStatedOnceTz("all times in ET")).toBe("ET"));
+  it("detects 'Times: PST'", () => expect(tryParseStatedOnceTz("Times: PST")).toBe("PST"));
+  it("detects 'times are CET'", () => expect(tryParseStatedOnceTz("times are CET")).toBe("CET"));
+  it("does NOT detect regular session line 'Keynote — 9:00 AM PT'", () =>
+    expect(tryParseStatedOnceTz("Keynote — 9:00 AM PT")).toBeNull());
+  it("does NOT detect standalone tz 'PT' (without 'all times' prefix)", () =>
+    expect(tryParseStatedOnceTz("PT")).toBeNull());
+});
+
+describe("SOURCE-TZ precedence: stated-once header applies to sessions with no inline tz", () => {
+  it("stated-once PT: session with no tz uses PT (statedOnceIana)", () => {
+    // "All times PT" sets statedOnceIana; "9:00 AM" has no inline tz
+    const detected = detectSourceTz("All times PT\n2026-06-16\nKeynote — 9:00 AM");
+    const statedOnceIana = detected?.originType === "stated-once" ? detected.ianaZone : undefined;
+    const rows = parseAgenda("All times PT\n2026-06-16\nKeynote — 9:00 AM", {
+      sourceTimezone: "UTC",
+      statedOnceIana,
+      referenceDate: REF_DATE,
+    });
+    const s = rows.filter(r => r.type === "session")[0] as ParsedSession;
+    // 9:00 AM PDT (UTC-7) = 16:00 UTC
+    expect(s.startUtc.toISOString()).toContain("T16:00:00");
+  });
+
+  it("inline tz overrides stated-once for that specific session", () => {
+    // "All times PT" stated; "B — 1:00 PM ET" has inline ET — ET wins for B only
+    const text = "All times PT\n2026-06-16\nA — 1:00 PM\nB — 1:00 PM ET";
+    const detected = detectSourceTz(text);
+    const statedOnceIana = detected?.originType === "stated-once" ? detected.ianaZone : undefined;
+    const rows = parseAgenda(text, {
+      sourceTimezone: "UTC",
+      statedOnceIana,
+      referenceDate: REF_DATE,
+    });
+    const sessions = rows.filter(r => r.type === "session") as ParsedSession[];
+    expect(sessions).toHaveLength(2);
+    // Find by title (chronological sort may reorder: B at 17:00 UTC comes before A at 20:00 UTC)
+    const aSession = sessions.find(s => s.title === "A");
+    const bSession = sessions.find(s => s.title === "B");
+    expect(aSession).toBeDefined();
+    expect(bSession).toBeDefined();
+    // Session A: 1:00 PM PDT (stated-once PT, UTC-7) = 20:00 UTC
+    expect(aSession!.startUtc.toISOString()).toContain("T20:00:00");
+    // Session B: 1:00 PM EDT (inline ET, UTC-4) = 17:00 UTC
+    expect(bSession!.startUtc.toISOString()).toContain("T17:00:00");
+  });
+
+  it("stated-once header line is NOT emitted as a row", () => {
+    const rows = parseAgenda("All times PT\n2026-06-16\nKeynote — 9:00 AM", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    // "All times PT" should not appear as any row
+    const allRawLines = rows.map(r => r.rawLine);
+    expect(allRawLines).not.toContain("All times PT");
+    // Should have dateheader + session (2 rows)
+    expect(rows.filter(r => r.type === "dateheader")).toHaveLength(1);
+    expect(rows.filter(r => r.type === "session")).toHaveLength(1);
+  });
+});
+
+// ── TOKEN-COLLISION: title words that look like tz tokens must survive ────────
+
+describe("Token-collision: title words that look like tz tokens are preserved", () => {
+  it("'PT Roadmap — Q3 — 2:00 PM PT' → title is 'PT Roadmap — Q3'", () => {
+    const rows = parseAgenda("2026-06-16\nPT Roadmap — Q3 — 2:00 PM PT", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    const s = rows.filter(r => r.type === "session")[0] as ParsedSession;
+    expect(s.type).toBe("session");
+    expect(s.title).toBe("PT Roadmap — Q3");
+    // Timezone is still parsed correctly as PT
+    // 2:00 PM PDT = UTC-7 → 21:00 UTC
+    expect(utcHM(s.startUtc)).toEqual({ h: 21, m: 0 });
+  });
+
+  it("'AM Keynote — 9:00 AM PT' → title is 'AM Keynote'", () => {
+    const rows = parseAgenda("2026-06-16\nAM Keynote — 9:00 AM PT", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    const s = rows.filter(r => r.type === "session")[0] as ParsedSession;
+    expect(s.title).toBe("AM Keynote");
+  });
+
+  it("'ET Office Hours — 14:00 ET' → title is 'ET Office Hours'", () => {
+    const rows = parseAgenda("2026-06-16\nET Office Hours — 14:00 ET", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    const s = rows.filter(r => r.type === "session")[0] as ParsedSession;
+    expect(s.title).toBe("ET Office Hours");
+    // 14:00 EDT (UTC-4) = 18:00 UTC
+    expect(utcHM(s.startUtc)).toEqual({ h: 18, m: 0 });
+  });
+
+  it("'PT Roadmap — Q3 — 2:00 PM PT' SUMMARY in combined .ics is exactly 'PT Roadmap — Q3'", () => {
+    const rows = parseAgenda("2026-06-16\nPT Roadmap — Q3 — 2:00 PM PT", {
+      sourceTimezone: "UTC",
+      referenceDate: REF_DATE,
+    });
+    const sessions = rows.filter(r => r.type === "session") as ParsedSession[];
+    const ics = buildAllSessionsIcs(sessions)!;
+    expect(ics).toContain("SUMMARY:PT Roadmap — Q3");
+  });
+});
+
+// ── CHRONOLOGICAL SORT ────────────────────────────────────────────────────────
+
+describe("Chronological sort: sessions render earliest-first regardless of input order", () => {
+  it("out-of-order sessions are re-sorted by startUtc", () => {
+    const text = "2026-06-16\nEvening — 5:00 PM UTC\nMorning — 9:00 AM UTC";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter(r => r.type === "session") as ParsedSession[];
+    expect(sessions).toHaveLength(2);
+    // Morning (09:00 UTC) should come before Evening (17:00 UTC)
+    expect(sessions[0].title).toBe("Morning");
+    expect(sessions[1].title).toBe("Evening");
+  });
+
+  it("preview order == .ics VEVENT order == chronological", () => {
+    const text = "2026-06-16\nPanel — 3:00 PM UTC\nKeynote — 9:00 AM UTC\nWorkshop — 1:00 PM UTC";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const sessions = rows.filter(r => r.type === "session") as ParsedSession[];
+    expect(sessions[0].title).toBe("Keynote");   // 09:00
+    expect(sessions[1].title).toBe("Workshop");  // 13:00
+    expect(sessions[2].title).toBe("Panel");     // 15:00
+    // .ics VEVENT order must match
+    const ics = buildAllSessionsIcs(sessions)!;
+    const summaries = [...ics.matchAll(/SUMMARY:(.+)/g)].map(m => m[1]);
+    expect(summaries[0]).toBe("Keynote");
+    expect(summaries[1]).toBe("Workshop");
+    expect(summaries[2]).toBe("Panel");
+  });
+
+  it("non-session rows keep their relative positions around sessions", () => {
+    const text = "2026-06-16\nEvening — 5:00 PM UTC\nlunch\nMorning — 9:00 AM UTC";
+    const rows = parseAgenda(text, { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    // After sorting, sessions are in chronological order
+    const sessions = rows.filter(r => r.type === "session") as ParsedSession[];
+    expect(sessions[0].title).toBe("Morning");
+    expect(sessions[1].title).toBe("Evening");
+  });
+});
+
+// ── NOTE ROW: no-time hint ────────────────────────────────────────────────────
+
+describe("NoteLineWithHint: note rows carry noTimeHint flag", () => {
+  it("timeless note lines have noTimeHint = true", () => {
+    const rows = parseAgenda("Networking Lunch", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("note");
+    expect((rows[0] as NoteLineWithHint).noTimeHint).toBe(true);
+  });
+
+  it("date header lines do NOT have noTimeHint", () => {
+    const rows = parseAgenda("2026-06-16", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    const dh = rows[0];
+    expect(dh.type).toBe("dateheader");
+    expect((dh as any).noTimeHint).toBeUndefined();
+  });
+
+  it("unparsed lines do NOT have noTimeHint (they have 'hint' property)", () => {
+    const rows = parseAgenda("Talk — 26:00 UTC", { sourceTimezone: "UTC", referenceDate: REF_DATE });
+    expect(rows[0].type).toBe("unparsed");
+    expect((rows[0] as any).noTimeHint).toBeUndefined();
+  });
+});
+
+// ── SUCCESS CHECK: SOURCE-TZ stated-once computed instant ─────────────────────
+
+describe("Success check: stated-once tz → correct UTC instant", () => {
+  it("All times PT + Keynote 2:00 PM → DTSTART 20260616T210000Z (2pm PDT = UTC-7)", () => {
+    const text = "All times PT\n2026-06-16\nKeynote — 2:00 PM";
+    const detected = detectSourceTz(text);
+    const statedOnceIana = detected?.originType === "stated-once" ? detected.ianaZone : undefined;
+    const rows = parseAgenda(text, {
+      sourceTimezone: "UTC",
+      statedOnceIana,
+      referenceDate: REF_DATE,
+    });
+    const sessions = rows.filter(r => r.type === "session") as ParsedSession[];
+    const ics = buildAllSessionsIcs(sessions)!;
+    // 2:00 PM PDT (UTC-7) = 21:00 UTC
+    expect(ics).toContain("DTSTART:20260616T210000Z");
+  });
+
+  it("inline CET suffix overrides stated-once PT for that session", () => {
+    const text = "All times PT\n2026-06-16\nA — 1:00 PM\nB — 14:00 CET";
+    const detected = detectSourceTz(text);
+    const statedOnceIana = detected?.originType === "stated-once" ? detected.ianaZone : undefined;
+    const rows = parseAgenda(text, {
+      sourceTimezone: "UTC",
+      statedOnceIana,
+      referenceDate: REF_DATE,
+    });
+    const sessions = rows.filter(r => r.type === "session") as ParsedSession[];
+    // A: 1:00 PM PDT (stated-once PT) = 20:00 UTC
+    // B: 14:00 CEST (inline CET/CEST, UTC+2) = 12:00 UTC
+    const aSession = sessions.find(s => s.title === "A");
+    const bSession = sessions.find(s => s.title === "B");
+    expect(aSession).toBeDefined();
+    expect(bSession).toBeDefined();
+    expect(utcHM(aSession!.startUtc)).toEqual({ h: 20, m: 0 });
+    expect(utcHM(bSession!.startUtc)).toEqual({ h: 12, m: 0 });
   });
 });

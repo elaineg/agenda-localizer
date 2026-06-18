@@ -1,80 +1,50 @@
-# Panel SYNTHESIS — agenda-localizer — Round 1
+# Panel SYNTHESIS — Round 1 (DEEPEN: parser robustness / trust-the-parse bundle)
 
-Preview tested: https://agenda-localizer-iyj1f0v5d-elainegao.vercel.app (commit b3303d0)
-Date: 2026-06-12. All 10 roster personas, parallel.
+App: agenda-localizer · URL tested: http://localhost:3000 (local prod build)
+Round goal: validate SOURCE-TZ AUTO-DETECT, TITLE/TZ TOKEN-COLLISION FIX, SHARED-VIEW HONEST SUMMARY, FLAGGED-ROW HINT + CHRONOLOGICAL SORT.
 
-## Score table
-| # | Persona | Clarity | Value | Advocacy | Fully passes (≥9 + Y/Y)? |
-|---|---------|---------|-------|----------|--------------------------|
-| 1 | Priya (backend eng) | Yes | Marginal | 7 | no |
-| 2 | Marcus (frontend eng) | Yes | Yes | 8 | no |
-| 3 | Wen (data analyst) | Yes | Marginal | 6 | no |
-| 4 | Tomás (ops analyst) | Yes | Marginal | 6 | no |
-| 5 | Dana (demand-gen mktr) | Yes | Marginal | 5 | no |
-| 6 | Jules (community mktr) | Yes | Marginal | 6 | no |
-| 7 | Aisha (product designer) | Yes | Yes | 8 | no |
-| 8 | Rob (freelance designer) | Yes | Marginal | 6 | no |
-| 9 | Elena (eng manager) | Yes | Yes | 8 | no |
-| 10 | Sam (PM) | Yes | Yes | 8 | no |
+## Audience-weighted bar (declared up front)
+IN-AUDIENCE = personas who announce/coordinate multi-session events across timezones.
+- IN-AUDIENCE (9): Priya, Marcus, Wen, Tomás, Dana, Jules, Aisha, Elena, Sam.
+- NON-FIT / borderline (1): Rob (low-frequency, occasional client calls; carry his floor, does not gate).
+PASS = every in-audience persona advocates at adv≥9.
 
-**Fully passing: 0/10.** Clarity unanimous Yes — the 5-second story works. The gap is entirely
-execution on the product's heart (the parser) plus trust/polish. No one is confused about what
-it's for; they don't yet trust/enjoy it enough to advocate.
+## Per-tester table
+| Name  | In-audience? | Advocacy | Clarity | Value | The one blocking thing |
+|-------|--------------|----------|---------|-------|------------------------|
+| Priya | yes | 9 | Y | Y | Override source-tz is a fixed 11-preset list, no arbitrary IANA entry (minor) |
+| Marcus| yes | 4 | Y | Y | Parser GLUES the "PT" tz token onto every session title — corrupts shared view + .ics |
+| Wen   | yes | 6 | Y | Y | Attendee "Source timezone" header states UTC/override while times are PT-derived — header contradicts the math |
+| Tomás | yes | 9 | Y | Y | Free-text-only input; can't paste a structured Excel/Outlook block (out-of-scope enhancement) |
+| Dana  | yes | 6 | Y | Y | Auto-detect only fires when "All times PT" is on its OWN line; embedded/parens phrasing silently fails → times 7–8h wrong, no warning |
+| Jules | yes | 9 | Y | Y | Override dropdown defaults to UTC even after correctly detecting PT — control contradicts the correct preview |
+| Aisha | yes | 8 | Y | Y | No-time rows demoted to faint italic with no inline add-time affordance — a real session can be lost |
+| Rob   | non-fit | 7 | Y | Y | Stale "UTC" labels (override default + attendee header) contradict correct PT rows, dent trust |
+| Elena | yes | 6 | Y | Y | Attendee header "Source timezone: UTC" contradicts PT-based rows; mobile never surfaces the "Detected: PT" indicator |
+| Sam   | yes | 8 | Y | Y | Shared-view header reads "Source timezone: UTC" while rows are correctly PT — detected zone not persisted into share link |
 
-## Frictions grouped by cause
+## In-audience-at-9 count: 3/9 (Priya, Tomás, Jules)
+Clarity 10/10 Y · Value 10/10 Y. Nobody disputes the value prop; every blocker is an execution defect, not a wedge doubt.
 
-### G1 — PARSER TOO STRICT — the dominant, recurring blocker (T2, T5, T6, T7, T10, T1)
-The spec scoped only `HH:MM`+tz, but real pasted schedules use bare-hour and informal times.
-The "paste your messy real schedule and it just works" promise is failing on common input.
-- Bare-hour am/pm NOT parsed: "8pm" (T2), "6pm"/"7 PM"/"9am" (T6), "2pm" (T7), "9am"/"4 PM ET" (T10), "noon CET" (T1). **5+ personas.**
-- Heading/title/note lines with no time ("Day 1 — Summit", "lunch", "TBD", a date/section header) are flagged as BROKEN sessions with a yellow "Couldn't read a time" warning (T7, T10, T2). They should render as section headers/notes, not errors.
-RECUR: yes, strongest signal in the round. This is THE fix.
+## Grouped defects
 
-### G2 — Parse warnings LEAK into the shared/attendee view (T2, T7, T10)
-The creator's yellow "Couldn't read a time" warning cards persist on the polished attendee
-view — "looks broken to viewers," "exactly what would stop me hitting send in Discord." The
-shared/growth surface must be clean. Warnings are creator-only feedback.
-RECUR: yes (3 personas, all value=Yes high-advocacy ones — this is blocking 8→9).
+### FEATURE defects (introduced/owned by THIS DEEPEN bundle — fixable)
+1. **Detected source-tz is NOT persisted/applied as the default — UTC leaks everywhere** — cited by 6 testers (Marcus, Wen, Jules, Rob, Elena, Sam). Two faces of one root bug:
+   - The "Override source timezone" selector defaults to UTC even when detection correctly reads PT (the control contradicts the correct preview).
+   - The shared/attendee view header reads "Source timezone: UTC" while every row is correctly computed FROM PT — header contradicts the math; detected zone is never encoded into the share link. Wen also flags override-leakage into the copied link.
+   - **This is the single dominant defect and the clearest path to PASS.** Pure trust-breaker: math is right everywhere, but the displayed/persisted source label is wrong. Caps Wen/Elena/Sam at 6–8 and is half of Marcus's problem.
 
-### G3 — Timezone correctness / trust bugs (T5, T3, T1)
-The worst class for a time tool — confidently wrong output destroys trust:
-- Inline per-line tz code ignored: "9:00 AM SGT" rendered as UTC (off by hours) and "SGT" leaked into the title (T5). SGT/JST/etc. either unrecognized-and-silently-treated-as-source, or not surfaced as a conflict.
-- Silent +1-day rollover with no indication when local time crosses to a different calendar day (T3, also Wen's #1 trust ask).
-- PST/PDT literal handling questioned (T3 "PST off-by-one"); "noon CET" failed (T1).
-FIX: (a) expand tz-abbreviation table (SGT and other common business zones); (b) when a line carries a tz token that isn't recognized or conflicts with the source dropdown, FLAG it rather than silently using source tz; (c) show a "+1 day"/"−1 day" date badge on any session whose localized time lands on a different calendar day; (d) confirm literal standard/daylight offsets.
-RECUR: partial but high-severity (trust is existential for this category; Wen/Dana are in-ICP).
+2. **Title/TZ token-collision fix is INCOMPLETE — "PT" prefix welded onto titles** — cited by Marcus (P0 for him; advocacy 4). The em-dash title "PT Roadmap — Q3" is no longer *misread as a timezone* (the fix's stated goal — that part PASSED for everyone), BUT the leading source-tz token ("PT", "AM") is stripped from the time and glued onto the title: `10:00 AM PT Opening Keynote` → title "PT Opening Keynote", confirmed in the shared view AND the .ics SUMMARY. Only Marcus hit this phrasing (time + tz on the same line as the title with no separator); others used separated lines. Real defect in the artifact that ships to viewers/calendars.
 
-### G4 — Calendar export not discoverable on the CREATOR preview (T1, T8)
-6 testers found+used the Google Calendar/.ics links (they work, on the SHARED view). But T1 and
-T8 concluded "no calendar export" because the creator-side localized preview doesn't surface
-add-to-calendar. Surface the same per-session calendar links in the creator preview.
-RECUR: 2 personas; cheap; removes a false "half a tool" perception.
+3. **Auto-detect is brittle to phrasing** — cited by Dana (caps her at 6). Detection fires only when "All times PT" is on its OWN bare line; "Summit 2026 — All times PT" or "(all times PT)" silently fails, selector stays UTC, times render 7–8h wrong with NO warning. Same silent-wrong-time class the feature exists to prevent. Fix = detect the phrase anywhere OR loudly warn when defaulting to UTC.
 
-### G5 — Privacy story invisible (T4, also reassures Wen/Tomás class)
-Data lives client-side in the URL hash and nothing is POSTed (Priya verified in network tab),
-but the UI never says so. Tomás (in-ICP, wary of pasting company schedules) is blocked on this.
-FIX: one plain-language line — "Runs entirely in your browser; nothing is uploaded — your agenda travels inside the link itself," plus a note that the share link contains the full agenda.
+### Polish / smaller feature gaps (carry; not blocking once #1–#3 land)
+4. **No-time row affordance** — Aisha (8) + Wen noted it works (flagged, excluded, sorted) but Aisha wants an inline "add time" affordance so a fast-scanning coordinator can't lose a real session. The flag+exclude+sort feature itself PASSED verification across testers.
+5. **Mobile doesn't surface the "Detected: PT" indicator** — Elena; desktop shows it, 375px does not.
 
-### G6 — Mobile editor: localized preview below the fold (T9)
-On mobile the sender can't see the localized proof before copying. Show a collapsed localized
-preview above the fold on mobile so the sender sees it works before sharing.
+### Out-of-scope / pre-existing enhancement requests (PARK — do not gate)
+6. **Free-text-only input; no structured paste** — Tomás (still a 9), Wen (CSV in/out). Paste-an-Excel/Outlook-table mode. Enhancement, not a regression.
+7. **Override is a closed 11-preset list, no arbitrary IANA entry** — Priya (still a 9). Minor enhancement.
 
-### G7 — Title-extraction edge cases (T2, T5, T8) — polish
-Trailing "@" left in a title (T2); tz code "SGT" leaks into title (T5); colons stripped from
-titles like "Workshop: Building" (T8 — currently by-design per spec, but reads as a bug).
-Reconsider stripping colons; strip trailing separators/tz tokens cleanly.
-
-### Single-persona / lower-priority
-- Ugly base64 `#hash` share URL "looks spammy/unprofessional" pasted in Slack/email (T8 low-freq, T9 still gave 8). Hard to fully fix (state must live in URL); defer unless cheap (a shorter/cleaner encoding or a note).
-- Share link only writes to URL on Copy; Priya lost an edit once (T1). Minor — consider live-updating the hash as you type, or clarify.
-
-## Plan for round 2 (priority order)
-1. **G1** — make the parser lenient: bare-hour am/pm ("8pm","9am","4 PM ET","11 p.m."), "noon"/"midnight"; treat timeless lines as section headers/notes, NOT errors. (THE fix.)
-2. **G2** — never show parse warnings on the shared/attendee view (creator-only).
-3. **G3** — tz correctness/trust: expand abbreviation table (SGT+), flag unrecognized/conflicting tz tokens instead of silently using source, add a "+1 day" date-cross badge, confirm PST/PDT/CET literals.
-4. **G4** — surface per-session add-to-calendar in the creator preview.
-5. **G5** — add the plain-language privacy line + share-link-contains-agenda note.
-6. **G6** — mobile: localized preview above the fold.
-7. **G7** — title-extraction cleanup (trailing tokens; reconsider colon stripping).
-
-Round 2 = re-test ALL 10 (none fully passed; the parser + warning-leak fixes touch every tester's flow).
+## Verdict
+FIX-AND-RETEST. One defect dominates and is cheap: **persist & apply the DETECTED source timezone everywhere** — pre-select it in the override selector, encode it into the share link, and make the attendee "Source timezone" header state the zone actually used. That single fix directly lifts Wen, Elena, Sam, Rob, Jules (and half of Marcus) from 6–8 toward 9+. Bundle two smaller robustness fixes in the same pass: (#2) stop welding the leading tz token onto titles when time+tz+title share a line; (#3) make auto-detect robust to "All times PT" embedded in a header/parens (or warn loudly on UTC fallback). Park #6/#7 as enhancements.

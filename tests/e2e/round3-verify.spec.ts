@@ -222,5 +222,7 @@ test("2f(c): edited slug on same payload still decodes (slug is cosmetic)", asyn
   await page.goto(editedUrl);
   const cards = page.locator(".bg-white.border.border-slate-200.rounded-lg");
   await expect(cards.first()).toBeVisible({ timeout: 5000 });
-  await expect(page.locator("text=Panel Discussion")).toBeVisible();
+  // Scope to card titles to avoid matching detection banner text
+  const cardTitles = cards.locator("p.font-semibold");
+  await expect(cardTitles.filter({ hasText: "Panel Discussion" }).first()).toBeVisible();
 });

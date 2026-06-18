@@ -1,50 +1,17 @@
----
-tester: 5
-name: Dana
-clarity: Yes
-value: Marginal
-advocacy: 5
----
+NAME: Dana | IN-AUDIENCE: yes (promotes multi-tz virtual summit agenda) | ADVOCACY: 6 | CLARITY: Y | VALUE: Y | BLOCKER: Source-tz auto-detect only fires when "All times PT" is on its OWN line — embed it in a title or parens and every time is silently 7–8h wrong with no warning.
 
-**Cold open (the 5s/one-scroll test):** Passes. Headline "Your agenda, in everyone's
-timezone." + subhead "Paste your sessions, share one link — each person sees their own
-local time." told me exactly what it does and who it's for before I scrolled. The page
-pre-loads a sample with localized times already rendered side-by-side, so I *saw* the
-value instead of having to imagine it. As a marketer this is the kind of legible I'd
-normally screenshot. The "Copy share link" button is the obvious next action.
+## Dana — Demand-gen marketer (MacBook + phone)
 
-**The job:** I pasted a real multi-timezone summit agenda — sessions in SGT, CET, ET.
-Copy link worked (clipboard had a hash-encoded URL, no backend needed — nice). I opened
-that link in a fresh Tokyo browser and the recipient saw a clean read-only agenda in
-Asia/Tokyo with per-session "Add to Google Calendar" + "Download .ics" and a "Make your
-own" footer. That recipient experience is genuinely good and is exactly what I'd drop in
-an email or behind a landing-page CTA.
+CLARITY: Y. Headline "Your agenda, in everyone's timezone" + "share one link, each person sees their own local time" told me exactly what it does in one scroll. The cold sample preview (localized times + add-to-calendar buttons already populated) sold it instantly — I'd screenshot this for the team channel.
 
-**But here's the dealbreaker — it gets the times WRONG, silently.** My line
-"APAC Welcome & Keynote — 9:00 AM SGT" was rendered as "9:00 AM **UTC**" with the word
-"SGT" jammed into the session title. "14:00 CET" became "14:00 **UTC**". The app ignores
-inline timezone codes and blindly stamps everything with the dropdown's "Source: UTC".
-9 AM SGT is 1 AM UTC — so the localized times my APAC prospects would see are off by
-hours, with zero warning. Worse, it's inconsistent: inline "PT" and "ET" DID parse, but
-"SGT"/"CET" didn't. For a *multi-timezone* summit — my entire use case — this produces
-confidently-wrong output. I'd send bad session times and not know it. That's the exact
-disaster this tool promises to prevent.
+VALUE: Y. Today I hand-build a tz table in Notion / paste a tzconverter grid into emails and a Canva graphic — tedious and error-prone for a multi-tz summit. A shareable link where each APAC prospect sees their own time + one-click "Download all sessions (.ics)" is genuinely better. The combined .ics validated: 4 correct VEVENTs (9 AM PT = 16:00Z), no-time rows correctly skipped. Attendee view carried my PT override and showed source + viewer tz cleanly. Mobile (375px) shows the live preview in one scroll.
 
-**Value vs. today:** Today I hand-build a timezone table in Notion or paste a
-timeanddate.com link. This is faster and the share-link/.ics is better than what I do
-now — IF I trust the times. The single-source-timezone model means every session in my
-agenda must be in one tz, which a global summit never is. So: Marginal.
+THE BLOCKER (why only 6, not 9): The source-timezone DETECTION is a trap. It worked for the sample ("Detected source timezone: PT — from 'All times PT'"). But my real header read "Virtual Summit 2026 — All times PT" — detection silently FAILED, the selector sat on UTC, and the bold "(your time)" number was off by 8 hours with ZERO warning. Same with "(all times PT)". Real agendas never put the tz note on its own bare line. I'd paste mine, see plausible times, share the link, and APAC prospects show up 8 hours wrong — the exact disaster this tool exists to prevent.
 
-**Frictions:**
-- Inline tz codes (SGT/CET/JST/AEST...) silently ignored → wrong times, no warning.
-- Single "Source timezone" dropdown can't model an agenda where sessions span zones.
-- Garbage like "SGT"/"ET" leaks into the session title instead of being consumed.
-- "TBD" / no-time lines correctly flagged — good, that part's handled well.
+Secondary: even when detection works, the "Override source timezone" select still visually reads "UTC" while the math is PT — inconsistent, made me distrust which value is live.
 
-**Highest-impact change:** Honor inline timezone abbreviations per line (or at minimum
-WARN "found 'SGT' in this line but applying UTC — fix?"). Getting times wrong silently
-turns a screenshot-worthy tool into a liability. Fix that and this jumps to an 8-9.
+WOULD I ADVOCATE: Not yet. The .ics + share link are strong, but I can't recommend a tool whose headline feature (auto-detect the tz I stated once) breaks on the most common phrasing and fails silently. Make detection robust to "— All times PT" / "(all times PT)" anywhere, OR loudly warn "couldn't detect source timezone — defaulting to UTC, please set it", and this jumps to a 9.
 
 ```json
-{"tester": 5, "round": 1, "clarity": "Yes", "value": "Marginal", "advocacy": 5, "topComplaints": ["Inline timezone codes (SGT/CET) silently ignored — every cross-tz session shows wrong localized time with no warning", "Single source-timezone model can't represent a multi-timezone summit, which is the core use case", "Unparsed tz codes leak into the session title"], "priorConcernsAddressed": "n/a"}
+{"tester": 5, "round": 1, "clarity": "Yes", "value": "Yes", "advocacy": 6, "topComplaints": ["Source-tz auto-detect only matches 'All times PT' on its own line; embedded in a title or parens it silently fails and times are 7-8h wrong with no warning", "Override-source-timezone select shows 'UTC' even when detection banner is correctly using PT — inconsistent, undermines trust in which value is live"], "priorConcernsAddressed": "n/a"}
 ```

@@ -1,55 +1,35 @@
----
-tester: 5
-name: Dana
-clarity: Yes
-value: Yes
-advocacy: 9
-prior_concerns_addressed: Yes
----
+# Round 2 — Tester 5 (Dana, Demand-gen marketer)
 
-**Re-check of my round-1 dealbreaker (inline per-line tz codes silently wrong):** FIXED, and
-fixed properly. I pasted an APAC-heavy agenda with mixed inline codes and opened the share
-link as a Tokyo (Asia/Tokyo) recipient. Every line is now correct:
+In-audience: YES (promotes a multi-timezone virtual summit; needs agenda in emails + landing pages so APAC prospects don't miss sessions). Round 1 score: 6.
 
-- "9:00 AM SGT" → shows **10:00 AM (your time)**, subtitle "9:00 AM SGT". (9 SGT = 1:00 UTC =
-  10 JST. Right.)
-- "2pm JST" → **2:00 PM**. Right.
-- "10am CET" → **5:00 PM** (CEST/DST in Sept = UTC+2 → 8:00 UTC → 5 PM JST). Right.
-- "4:30 PM AEST" → **3:30 PM**. Right.
+## Round-1 blocker recheck — IS IT FIXED?
+**FIXED. Confirmed.** My exact round-1 defect was: embedded/parenthetical tz ("Summit 2026 — All times PT", "(all times PT)") silently failed, rendered 7-8h wrong, no warning.
 
-Last round these all stamped UTC and were off by hours. Now they parse. The dropdown even
-lists the supported codes (SGT, JST, CET/CEST, AEST, IST, BST...), so I know the vocabulary.
+- Pasted agenda starting "Summit 2026 — All times PT" (tz ONLY stated embedded).
+  → Banner: "Detected source timezone: PT — from 'Summit 2026 — All times PT'"
+  → Override selector SNAPPED to "PT (America/Los_Angeles)". No silent UTC.
+- "Times listed in CET" → detected CET, selector snapped to Europe/Paris. Works.
+- No "UTC" lie anywhere — every footer row reads "10:00 AM PT", "9:00 AM PT", etc. All indicators AGREE.
 
-**Title leakage:** FIXED. "SGT"/"JST" no longer jam into the session title — the title is
-clean ("APAC Welcome & Keynote") and the source-tz string sits as a small grey subtitle
-under the localized time. That two-line treatment (big "(your time)" + small source) is
-actually exactly how I'd want to present it in an email.
+## Other round-2 claims verified
+- "10:00 AM PT Opening Keynote" → title rendered "Opening Keynote" (prefix stripped). ✓
+- "PT Roadmap — Q3" → kept its "PT", shown as no-time row "not exported". ✓
+- No-time rows (Networking Lunch, PT Roadmap) → "no time — not exported". ✓
+- Out-of-order sessions → auto-sorted (8AM/9AM/10AM). ✓
+- Share link: created, agenda lives in URL hash (truly client-side, nothing uploaded). ✓
+- Attendee view (opened in Asia/Tokyo): "Source timezone: PT" + "Times shown in your timezone: Asia/Tokyo" + 10:00 AM PT → **2:00 AM (+1 day)** with a "+1 day" badge. This is THE feature for APAC summit promotion — the +1 day badge is exactly what stops Tokyo prospects from showing up a day late. Source tz + times travel correctly. ✓
+- Combined .ics: one file, 2 VEVENTs, correct UTC (10AM PT = 17:00Z, 2PM PT = 21:00Z), title cleaned. ✓
+- Mobile 375px: embedded detect fires, selector snaps to PT, preview-first layout clean. ✓
 
-**Unknown tz now warned, not silently wrong:** FIXED — this was my explicit ask. "Mystery
-Session — 11am XYZ" falls back to source UTC AND shows an amber flag: "Unknown timezone
-'XYZ' — using source tz". So I'd catch a typo'd code instead of shipping a wrong time. Exactly
-the safety net I wanted.
+## Answers
+1. USE & ADVOCATE? Yes to both. I'd paste my summit agenda once, drop the share link in the email + landing page, and the Tokyo/Sydney prospects each see their own local time with day-shift warnings. I would screenshot the attendee-Tokyo "+1 day" view for the team channel — that's the screenshot-worthy moment.
+2. **Advocacy: 9/10.**
+3. The ONE thing: on MOBILE the "Detected source timezone" confirmation banner isn't surfaced in the top preview block the way it is on desktop — detection fired (selector snapped), but on my phone I couldn't SEE the proof that it caught my embedded "All times PT". For a tool whose whole trust hinges on "did it read my tz right?", I want that banner visible on mobile without scrolling to the selector. Minor, not a blocker — hence 9 not 10.
 
-**Multi-timezone summit now actually works.** My core complaint was that one global "Source
-timezone" dropdown couldn't model a summit where sessions live in different zones. Inline
-per-line codes solve that — I keep the dropdown on UTC and tag each session in its native
-zone. That's my whole use case, handled.
-
-**Value vs. today:** Today I hand-build a tz table in Notion / paste timeanddate.com links and
-re-do it per recipient region. This replaces all of that: paste once, one share link, each
-recipient sees their own time, plus per-session "Add to Google Calendar" + ".ics". Now that I
-trust the math, this is a clear time saver, not marginal. Yes.
-
-**What keeps it off a 10:** (1) "Networking — TBD" (no time) just drops to a quiet italic line
-at the bottom with no localized slot — fine, but I'd like it inline in order. (2) I'd love a
-visible "view in [region]" toggle on the share page so I can screenshot the APAC version for a
-LinkedIn post without spoofing my own tz. (3) DST correctness on CET I had to trust/verify
-myself; a tiny "(UTC+2)" offset hint next to the source line would let me sanity-check at a
-glance. None are blockers — these are polish.
-
-I'd recommend this to my events/marketing peers running multi-tz webinars. It does the one
-annoying thing correctly now.
+Clarity: Y ("Your agenda, in everyone's timezone" + "share one link — each person sees their own local time" nailed it in one scroll).
+Value: Y (today I hand-build a tz table in Notion/Canva for each region and STILL get day-shift wrong; this does it in one paste + one link).
+Embedded/parenthetical auto-detect: **FIXED.**
 
 ```json
-{"tester": 5, "round": 2, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["No 'view as region X' toggle on the share page to screenshot a specific tz without spoofing my own", "No-time lines (TBD) get demoted to a footnote instead of staying in agenda order", "DST/offset isn't shown so I had to verify CET math myself"], "priorConcernsAddressed": "all"}
+{"tester":5,"round":2,"clarity":"Yes","value":"Yes","advocacy":9,"topComplaints":["mobile detection-confirmation banner not surfaced in top preview block"],"priorConcernsAddressed":"all"}
 ```

@@ -1,51 +1,33 @@
----
-tester: 2
-name: Marcus
-clarity: Yes
-value: Yes
-advocacy: 9
-prior_concerns_addressed: Yes
----
+# Round 3 — Tester 2 (Wen, marketing data analyst, desktop two-monitor)
 
-Round-3, re-checking the ONE blocker that held me at 8 in round 2: the parser was eating the
-last word of a title that sat right before the time. I pasted a real launch-week agenda built
-specifically to hit it — titles ending in product nouns right before the time:
+## Prior concern (round-2 cap → 9): "Early Bird" mis-sniffed as tz "EARLY"
+Builder claimed fixed. Re-checked the EXACT thing first.
+- Pasted: `9:00 AM Early Bird Registration` + normal sessions, source "All times PT".
+- NO "Unknown timezone 'EARLY'" warning anywhere — desktop, mobile 375, OR shared view. (any "Unknown timezone" = false)
+- Title "Early Bird Registration" intact in cards, shared link view, AND .ics: `SUMMARY:Early Bird Registration`, filename `early-bird-registration.ics`.
+- Hand-verified conversion: 9:00 AM PDT(UTC-7) → `DTSTART:20260910T160000Z`. Correct. Keynote 10:00→1700Z, Workshop 2:00PM→2100Z. All correct.
+VERDICT: round-2 defect FIXED, completely. 
 
-```
-Live Coding: Build with our SDK 11:30am PT
-Panel on DX 2pm PT
-A talk that ends in API 3pm PT
-Office Hours on the CLI 4:30pm PT
-Closing party — 8pm PT
-broken line no time here
-```
+## Scenario 3 — legitimate PT detection (regression check)
+- `All times PT` header → "Detected source timezone: PT — from 'All times PT'". WORKS. NO regression on header tz detection.
+- Times convert correctly (10:00 PT→1700Z, 11:30→1830Z, 1:00→2000Z, hand-checked).
 
-**Blocker FIXED.** Every trailing word survives, in BOTH views:
-- Editor preview: "Live Coding: Build with our SDK", "Panel on DX", "A talk that ends in API",
-  "Office Hours on the CLI". SDK / DX / API / CLI all intact — exactly the words that vanished
-  last round.
-- Attendee view (opened the share link in an Asia/Tokyo context): identical, all four product
-  nouns present, "3:30 AM (your time) +1 day / 11:30 AM PT" stack correct. This is the half of
-  my titles that would have silently lost a word in front of my whole team — it's solid now.
+## NEW finding — silent title strip on per-line tz token (the one thing holding me back)
+Test spec said: "'PT Roadmap' should keep 'PT' in the title." It does NOT.
+- `10:00 AM PT Opening Keynote` → card title renders "Opening Keynote" (PT eaten)
+- `11:30 AM PT Roadmap — Q3` → card title renders "Roadmap — Q3" (PT eaten)
+- Same in .ics: `SUMMARY:Opening Keynote`, `SUMMARY:Roadmap — Q3`. PT stripped everywhere.
+The app treats any tz token (PT/CET/etc) directly after the time as a per-session tz override and SILENTLY removes it from the title — no diff, no notice.
+This is milder than EARLY (PT is a real tz, so consuming it is defensible) — but as someone who distrusts tools that transform data invisibly, a silent strip with zero signal is exactly the pattern I flag. "PT Roadmap" is a TITLE, not a tz override; I'd want it kept, OR at least a visible "moved 'PT' to source-tz" note so I can verify nothing was lost.
+NOT a regression vs round-2 (round-2 was about a FALSE warning; this is silent stripping of a real-tz word) — but it is the inverse trust problem.
 
-Everything I praised before still holds: the "broken line no time here" junk line renders as a
-quiet gray italic note in author AND attendee view (no scary warning card leaking to viewers),
-per-session "Add to Google Calendar" / "Download .ics", clean viewer header ("Agenda / Source
-timezone / Times shown in your timezone"). Zero console errors in editor or Tokyo viewer.
+## Answers
+1. ADVOCACY: 9 → 9. The false-warning fix is real and clean and earns back the trust it cost. It does NOT lift me to 10 because the new silent PT-strip is the same family of "did it quietly change my data?" doubt — a 10 needs me to fully trust it with the audience, and I caught it dropping a title word with no notice. One visible signal (or keeping the word) and this is a 10.
+2. CLARITY: Yes. Headline "Your agenda, in everyone's timezone" + "Detected source timezone" + per-card "(your time)" vs source line told me exactly what it does in <30s. CSV-out exists ("Copy as table"), which I like.
+3. ONE BLOCKING THING: none is hard-blocking (I'd still ship/recommend). The single thing capping me at 9: a per-line tz token (PT/CET) immediately after the time is silently stripped from the title with no visible notice — show a diff/notice or keep the word.
 
-**CSS polish:** genuinely good. The "Copy share link" button flips to a green "✓ Copied! / Link
-copied — paste it anywhere" state — clear feedback, no jank. Consistent card spacing, right type
-hierarchy, blue (your time) + muted source-time line + orange "+1 day" badge is the correct info
-density. Mobile (375px) collapses to "+2 more / See all" sensibly. Nothing janky to flag.
-
-**Why 9 not 10:** the title-drop fix earns the 9 — I'd now drop this in our team Slack unprompted
-for launch week. What keeps it off a 10 is purely nice-to-have: I'd love a one-click "set source
-TZ to PT" instead of hunting the dropdown (I left it on UTC by accident once), and an at-a-glance
-"viewers see THEIR time" reassurance line near the copy button so a teammate trusts the link
-before clicking. Neither is a defect — the core job is done well.
-
-Blocker status: FIXED. No remaining blockers.
-
+clarity: Yes | value: Yes (vs my manual BigQuery/Sheets tz math + per-attendee copy — this is one paste, one link, conversions I verified by hand were exact)
+fixed-or-regressed: round-2 defect FIXED; NO regression on legit tz detection; one NEW silent-strip nit found.
 ```json
-{"tester": 2, "round": 3, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["Minor: source-timezone is a plain dropdown, easy to leave on wrong default (left on UTC by accident)", "Minor: no reassurance line near Copy button telling the author that viewers auto-see their own local time"], "priorConcernsAddressed": "all"}
+{"tester": 2, "round": 3, "clarity": "Yes", "value": "Yes", "advocacy": 9, "topComplaints": ["per-line tz token (PT/CET) right after the time is silently stripped from the title in cards + .ics with no visible notice — 'PT Roadmap' becomes 'Roadmap'; a data-hygiene user can't see what was removed", "no in-UI signal/diff showing which tokens were consumed as timezones vs kept as title text"], "priorConcernsAddressed": "all"}
 ```

@@ -310,12 +310,13 @@ just some words with no time`;
   const count = await sessionCards.count();
   expect(count).toBe(4);
 
-  // The "Opening Keynote" session should be present
-  await expect(page.locator("text=Opening Keynote")).toBeVisible();
+  // The "Opening Keynote" session should be present (scope to card titles to avoid banner text)
+  const cardTitles = page.locator(".bg-white.border.border-slate-200.rounded-lg p.font-semibold");
+  await expect(cardTitles.filter({ hasText: "Opening Keynote" }).first()).toBeVisible();
   // Round-2: extractTitle preserves internal colons, so title is "Workshop: Building with AI"
-  await expect(page.locator("text=Workshop: Building with AI")).toBeVisible();
-  await expect(page.locator("text=Panel Discussion")).toBeVisible();
-  await expect(page.locator("text=Community Q&A")).toBeVisible();
+  await expect(cardTitles.filter({ hasText: "Workshop: Building with AI" }).first()).toBeVisible();
+  await expect(cardTitles.filter({ hasText: "Panel Discussion" }).first()).toBeVisible();
+  await expect(cardTitles.filter({ hasText: "Community Q&A" }).first()).toBeVisible();
 
   // Source time for keynote visible — now shown inside the per-card date+time label
   // (either in p.text-sm.text-slate-500 when hasNoDate, or in [data-testid="session-parsed-date"] when dated)
@@ -334,11 +335,12 @@ test("Load sample button fills the editor and renders sessions", async ({
   await expect(loadSampleBtn).toBeVisible();
   await loadSampleBtn.click();
 
-  // Editor should have text
+  // Editor should have text — new sample uses "All times PT" stated-once header
   const textarea = page.locator('[data-testid="agenda-input"]');
   const value = await textarea.inputValue();
-  expect(value).toContain("16:00 UTC");
   expect(value).toContain("Opening Keynote");
+  // New sample uses stated-once PT header + relative times (9:00 AM, 2:00 PM etc.)
+  expect(value).toContain("All times PT");
 });
 
 // ── P1 regression: bad times must not crash the app (R1) ─────────────────────
@@ -759,8 +761,8 @@ test("P0 fix: 'Mon June 23' inline date not leaked into session SUMMARY", async 
   }
 });
 
-// ── P0 fix: hasNoDate warning visible in creator view ─────────────────────────
-test("P0 fix: sessions with no date show a 'no date found' alert in creator view", async ({
+// ── P0 fix: hasNoDate warning visible in creator view (now as top-level banner) ──
+test("P0 fix: sessions with no date show a 'no date' banner in creator view", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -770,11 +772,12 @@ test("P0 fix: sessions with no date show a 'no date found' alert in creator view
   const textarea = page.locator('[data-testid="agenda-input"]');
   await textarea.fill("Sprint Planning — 9:00 AM PT");
 
-  // Wait for the alert to appear — scope to the desktop panel (hidden lg:flex)
-  // to avoid strict mode violation from mobile duplicates (lg:hidden panels)
+  // Wait for the top-level undated-sessions banner — scope to the desktop panel
   const desktopPanel = page.locator('.hidden.lg\\:flex');
-  const noDateAlert = desktopPanel.locator('[role="alert"]:has-text("No date found")').first();
-  await expect(noDateAlert).toBeVisible({ timeout: 3000 });
+  const banner = desktopPanel.locator('[data-testid="undated-sessions-banner"]').first();
+  await expect(banner).toBeVisible({ timeout: 3000 });
+  const bannerText = await banner.innerText();
+  expect(bannerText.toLowerCase()).toContain("no date");
 });
 
 // ── P1 fix: "Imports into Google Calendar, Apple Calendar & Outlook" always shown on creator ──
